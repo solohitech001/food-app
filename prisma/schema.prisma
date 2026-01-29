@@ -1,0 +1,59 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  VENDOR
+  BUYER
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+model User {
+  id          String        @id @default(uuid())
+  email       String        @unique
+  password    String
+  role        Role          @default(BUYER)
+  status      AccountStatus @default(PENDING)
+  isVerified  Boolean       @default(false)
+  profile     Profile?
+  location    Location?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([role])
+  @@index([status])
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  firstName String
+  lastName  String
+  phone     String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  country   String
+  state     String
+  city      String
+  isLocked  Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
