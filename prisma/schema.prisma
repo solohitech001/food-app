@@ -1,59 +1,56 @@
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "library"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  ADMIN
-  VENDOR
-  BUYER
-}
-
-enum AccountStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-  BANNED
-}
-
 model User {
-  id          String        @id @default(uuid())
-  email       String        @unique
-  password    String
-  role        Role          @default(BUYER)
-  status      AccountStatus @default(PENDING)
-  isVerified  Boolean       @default(false)
-  profile     Profile?
-  location    Location?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
 
-  @@index([role])
-  @@index([status])
+  vendor    Vendor?
+  orders    Order[]
 }
 
-model Profile {
+model Vendor {
   id        String   @id @default(uuid())
+  name      String
   userId    String   @unique
-  firstName String
-  lastName  String
-  phone     String?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  foods     Food[]
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
-model Location {
+model Food {
   id        String   @id @default(uuid())
-  userId    String   @unique
-  country   String
-  state     String
-  city      String
-  isLocked  Boolean  @default(true)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  price     Float
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model Order {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  status    OrderStatus   @default(PENDING)
+  createdAt DateTime     @default(now())
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  DELIVERED
 }
