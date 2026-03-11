@@ -4,44 +4,14 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(CUSTOMER)
-  createdAt DateTime @default(now())
-
-  vendor    Vendor?
-  orders    Order[]
-}
-
-model Vendor {
-  id        String   @id @default(uuid())
-  name      String
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  foods     Food[]
-  createdAt DateTime @default(now())
-}
-
-model Food {
-  id        String   @id @default(uuid())
-  name      String
-  price     Float
-  vendorId  String
-  vendor    Vendor   @relation(fields: [vendorId], references: [id])
-  createdAt DateTime @default(now())
-}
-
-model Order {
-  id        String        @id @default(uuid())
-  userId    String
-  user      User          @relation(fields: [userId], references: [id])
-  status    OrderStatus   @default(PENDING)
-  createdAt DateTime     @default(now())
-}
+/**
+ * =====================
+ * ENUMS
+ * =====================
+ */
 
 enum Role {
   CUSTOMER
@@ -49,8 +19,396 @@ enum Role {
   ADMIN
 }
 
+enum VendorStatus {
+  PENDING
+  UNDER_REVIEW
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum LocationLockType {
+  RADIUS
+  CITY
+  STATE
+  POLYGON
+}
+
 enum OrderStatus {
   PENDING
   PREPARING
   DELIVERED
+  CANCELLED
+}
+
+enum VendorDocumentType {
+  NIN
+  PASSPORT
+  CAC
+  BUSINESS_LICENSE
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum TransactionSource {
+  FLUTTERWAVE
+  TRANSFER
+  WITHDRAWAL
+}
+
+enum EscrowStatus {
+  HELD
+  RELEASED
+  REFUNDED
+}
+
+enum VendorLevel {
+  LEVEL_1
+  LEVEL_2
+  LEVEL_3
+}
+
+/**
+ * =====================
+ * USER
+ * =====================
+ */
+
+model User {
+  id          String  @id @default(uuid())
+  phoneNumber String? @unique
+  email       String? @unique
+  password    String?
+  role        Role    @default(CUSTOMER)
+  isVerified  Boolean @default(false)
+
+  latitude  Float?
+  longitude Float?
+  city      String?
+  state     String?
+
+  otpCode      String?
+  otpExpiresAt DateTime?
+  lastOtpSentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  vendor     Vendor?
+  wallet     Wallet?
+  orders     Order[]
+  reviews    Review[]   // ✅ FIXED
+
+  foodLikes  FoodLike[]
+  foodSaves  FoodSave[]
+  foodShares FoodShare[]
+}
+
+/**
+ * =====================
+ * VENDOR
+ * =====================
+ */
+
+model Vendor {
+  id     String @id @default(uuid())
+  name   String
+  userId String @unique
+
+  status VendorStatus @default(PENDING)
+
+  latitude  Float?
+  longitude Float?
+  city      String?
+  state     String?
+
+  deliveryRadiusKm Float            @default(10)
+  locationLockType LocationLockType @default(RADIUS)
+  level            VendorLevel      @default(LEVEL_1)
+
+  user            User             @relation(fields: [userId], references: [id])
+  wallet          Wallet?
+  foods           Food[]
+  deliveryZones   VendorZone[]
+  vendorDocuments VendorDocument[]
+  orders          Order[]
+
+  reviews Review[]          // ✅ FIXED
+  badges  VendorBadge[]     // ✅ FIXED
+
+  createdAt DateTime @default(now())
+}
+
+/**
+ * =====================
+ * VENDOR ZONES
+ * =====================
+ */
+
+model VendorZone {
+  id       String @id @default(uuid())
+  vendorId String
+  name     String
+  polygon  Json
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * =====================
+ * VENDOR DOCUMENTS
+ * =====================
+ */
+
+model VendorDocument {
+  id       String             @id @default(uuid())
+  vendorId String
+  type     VendorDocumentType
+  fileUrl  String
+
+  status  DocumentStatus @default(PENDING)
+  comment String?
+
+  createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * =====================
+ * FOOD
+ * =====================
+ */
+
+model Food {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+
+  imageUrl String?
+  mediaUrl String?
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  likes  FoodLike[]
+  saves  FoodSave[]
+  shares FoodShare[]
+
+  createdAt DateTime @default(now())
+}
+
+/**
+ * =====================
+ * FOOD ENGAGEMENT
+ * =====================
+ */
+
+model FoodLike {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, userId])
+}
+
+model FoodSave {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, userId])
+}
+
+model FoodShare {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  food Food  @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+/**
+ * =====================
+ * WALLET
+ * =====================
+ */
+
+model Wallet {
+  id String @id @default(uuid())
+
+  userId   String? @unique
+  vendorId String? @unique
+
+  balance        Float  @default(0)
+  accountNumber  String @unique
+  bankName       String
+  flutterwaveRef String
+
+  withdrawalsThisMonth Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  transactions Transaction[]
+
+  escrowsHeld     Escrow[] @relation("UserEscrow")
+  escrowsToVendor Escrow[] @relation("VendorEscrow")
+}
+
+/**
+ * =====================
+ * TRANSACTIONS
+ * =====================
+ */
+
+model Transaction {
+  id       String @id @default(uuid())
+  walletId String
+
+  amount Float
+  type   TransactionType
+  source TransactionSource
+
+  reference String @unique
+  narration String
+
+  createdAt DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+}
+
+/**
+ * =====================
+ * ORDERS
+ * =====================
+ */
+
+model Order {
+  id        String      @id @default(uuid())
+  userId    String
+  vendorId  String
+  amount    Float
+  status    OrderStatus @default(PENDING)
+
+  acceptBy  DateTime
+
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  escrow  Escrow?
+  review  Review?   // ✅ ONE review per order
+}
+
+/**
+ * =====================
+ * ESCROW
+ * =====================
+ */
+
+model Escrow {
+  id             String @id @default(uuid())
+  orderId        String @unique
+  walletId       String
+  vendorWalletId String
+
+  amount Float
+  status EscrowStatus @default(HELD)
+
+  createdAt  DateTime  @default(now())
+  releasedAt DateTime?
+  refundedAt DateTime?
+
+  order        Order  @relation(fields: [orderId], references: [id])
+  wallet       Wallet @relation("UserEscrow", fields: [walletId], references: [id])
+  vendorWallet Wallet @relation("VendorEscrow", fields: [vendorWalletId], references: [id])
+}
+
+/**
+ * =====================
+ * REVIEWS
+ * =====================
+ */
+
+model Review {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  vendorId  String
+  userId    String
+
+  rating  Int
+  comment String?
+
+  createdAt DateTime @default(now())
+
+  order  Order  @relation(fields: [orderId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+/**
+ * =====================
+ * VENDOR BADGES
+ * =====================
+ */
+
+model VendorBadge {
+  id       String @id @default(uuid())
+  vendorId String
+  type     String
+
+  createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * =====================
+ * WEBHOOK EVENTS
+ * =====================
+ */
+
+model WebhookEvent {
+  id        String   @id @default(uuid())
+  reference String   @unique
+  source    String
+  createdAt DateTime @default(now())
+}
+
+/**
+ * =====================
+ * AUDIT LOGS
+ * =====================
+ */
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  target    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
 }
