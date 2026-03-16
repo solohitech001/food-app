@@ -21,7 +21,7 @@ export class VendorsController {
   @Post('onboard')
   onboardVendor(@Req() req: any, @Body() body: any) {
     return this.vendorsService.createVendor(
-      req.user.userId,
+      req.user.id,
       body.name,
     );
   }
