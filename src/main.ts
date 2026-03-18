@@ -10,8 +10,8 @@ async function bootstrap() {
 
   // Swagger setup
   const config = new DocumentBuilder()
-    .setTitle('My API')
-    .setDescription('API documentation for my NestJS project')
+    .setTitle('Plattar API')
+    .setDescription('API documentation for plattar backend services (Version 1.0)  - Authentication, User Management, and Location Services')
     .setVersion('1.0')
     .addBearerAuth() // Optional if you use JWT
     .build();
