@@ -1,70 +1,106 @@
+// src/vendors/vendors.service.ts
 import {
   Injectable,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateVendorProfileDto } from './dto/update-vendor-profile.dto';
+import { DocumentType } from './dto/upload-vendor-document.dto';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { randomUUID } from 'crypto';
+import { Express } from 'express';
 
 @Injectable()
 export class VendorsService {
+  private s3 = new S3Client({
+    region: 'eu-central-1',
+  credentials: {
+      accessKeyId: 'BO2MFYSYNZCFUV9U8LTN',
+      secretAccessKey: 'jaYJNU1qJIV1mIHnjHqmYOY5BfiECurRAiJo0nwV',
+    },
+    endpoint: 'https://eu-central-1.linodeobjects.com',
+  });
+
   constructor(private prisma: PrismaService) {}
 
-  /* USER → APPLY VENDOR */
+  /* CREATE VENDOR */
   async createVendor(userId: string, name: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
-
-    if (!user.isVerified) {
+    if (!user.isVerified)
       throw new BadRequestException('Verify your account first');
-    }
 
     const existingVendor = await this.prisma.vendor.findUnique({
       where: { userId },
     });
-
-    if (existingVendor) {
+    if (existingVendor)
       throw new BadRequestException('Vendor already exists');
-    }
 
-    return this.prisma.$transaction(async (tx) => {
-      const vendor = await tx.vendor.create({
-        data: {
-          name,
-          userId,
-          status: 'PENDING',
-        },
-      });
-
-      await tx.user.update({
-        where: { id: userId },
-        data: { role: 'VENDOR' },
-      });
-
-      return {
-        message: 'Vendor application submitted. Upload documents for review.',
-        vendor,
-      };
+    return this.prisma.vendor.create({
+      data: {
+        name,
+        status: 'PENDING',
+        user: { connect: { id: userId } },
+      },
     });
   }
 
-  /* ============================
-     VENDOR UPLOAD DOCUMENT
-  ============================ */
-  async uploadVendorDocument(
-    userId: string,
-    type: 'NIN' | 'PASSPORT' | 'CAC' | 'BUSINESS_LICENSE',
-    fileUrl: string,
+  /* UPDATE PROFILE */
+  async updateVendorProfile(
+    vendorId: string,
+    dto: UpdateVendorProfileDto,
   ) {
     const vendor = await this.prisma.vendor.findUnique({
+      where: { id: vendorId },
+    });
+    if (!vendor) throw new ForbiddenException('Vendor not found');
+
+    const data: any = { ...dto };
+
+    return this.prisma.vendor.update({
+      where: { id: vendorId },
+      data,
+    });
+  }
+
+  /* UPLOAD DOCUMENT */
+  async uploadVendorDocument(
+    userId: string,
+    type: DocumentType,
+    file: Express.Multer.File,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new BadRequestException('User not found');
+
+    let vendor = await this.prisma.vendor.findUnique({
       where: { userId },
     });
 
     if (!vendor) {
-      throw new ForbiddenException('Vendor not found');
+      vendor = await this.prisma.vendor.create({
+        data: {
+          userId: user.id,
+          name: 'Default Vendor Pending',
+          status: 'PENDING',
+        },
+      });
     }
+
+    const fileKey = `${vendor.id}/${randomUUID()}-${file.originalname}`;
+
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: 'magikworldgifts',
+        Key: fileKey,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }),
+    );
+
+    const fileUrl = `https://magikworldgifts.eu-central-1.linodeobjects.com/${fileKey}`;
 
     const document = await this.prisma.vendorDocument.create({
       data: {
@@ -75,113 +111,51 @@ export class VendorsService {
       },
     });
 
-    // Move vendor to UNDER_REVIEW
-    if (vendor.status === 'PENDING') {
-      await this.prisma.vendor.update({
-        where: { id: vendor.id },
-        data: { status: 'UNDER_REVIEW' },
-      });
-    }
-
     return {
       message: 'Document uploaded successfully. Await admin review.',
       document,
     };
   }
 
-  /* ============================
-     ADMIN VIEW VENDOR DOCUMENTS
-  ============================ */
+  /* ADMIN: GET ALL */
+  async getAllVendors() {
+    return this.prisma.vendor.findMany({
+      include: { user: true, vendorDocuments: true },
+    });
+  }
+
+  /* ADMIN: FILTER */
+  async getVendorsByStatus(status: any) {
+    return this.prisma.vendor.findMany({
+      where: { status },
+      include: { user: true },
+    });
+  }
+
+  /* ADMIN: DOCUMENTS */
   async getVendorDocuments(vendorId: string) {
     return this.prisma.vendorDocument.findMany({
       where: { vendorId },
     });
   }
 
-  /* ============================
-     ADMIN APPROVE VENDOR
-  ============================ */
-  async approveVendor(vendorId: string) {
-    const documents = await this.prisma.vendorDocument.findMany({
-      where: { vendorId },
-    });
-
-    if (documents.length === 0) {
-      throw new BadRequestException('No documents uploaded');
-    }
-
-    const unapproved = documents.some((doc) => doc.status !== 'APPROVED');
-
-    if (unapproved) {
-      throw new BadRequestException('All documents must be approved first');
-    }
-
-    return this.prisma.vendor.update({
-      where: { id: vendorId },
-      data: { status: 'ACTIVE' },
+  async approveDocument(documentId: string) {
+    return this.prisma.vendorDocument.update({
+      where: { id: documentId },
+      data: { status: 'APPROVED' },
     });
   }
 
-  /* ============================
-     ADMIN REJECT VENDOR
-  ============================ */
-  async rejectVendor(vendorId: string) {
-    return this.prisma.vendor.update({
-      where: { id: vendorId },
-      data: { status: 'REJECTED' },
-    });
-  }
-
-  /* ENSURE VENDOR IS ACTIVE */
-  async ensureActiveVendor(userId: string) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { userId },
-    });
-
-    if (!vendor) throw new ForbiddenException('Vendor not found');
-
-    if (vendor.status !== 'ACTIVE') {
-      throw new ForbiddenException('Vendor not approved yet');
-    }
-
-    return vendor;
-  }
-
-  /* ADMIN → LIST PENDING / UNDER REVIEW */
-  async getPendingVendors() {
-    return this.prisma.vendor.findMany({
-      where: {
-        status: {
-          in: ['PENDING', 'UNDER_REVIEW'],
-        },
-      },
-      include: { user: true },
-    });
-  }
-
-  async updateVendorLocation(userId, data) {
-    return this.prisma.vendor.update({
-      where: { userId },
-      data,
-    });
-  }
-
-  async recalculateVendorLevel(vendorId: string) {
-    const completedOrders = await this.prisma.order.count({
-      where: {
-        vendorId,
-        status: 'DELIVERED',
-      },
-    });
-
-    let level: 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3' = 'LEVEL_1';
-
-    if (completedOrders >= 100) level = 'LEVEL_3';
-    else if (completedOrders >= 30) level = 'LEVEL_2';
-
-    return this.prisma.vendor.update({
-      where: { id: vendorId },
-      data: { level },
+  async rejectDocument(documentId: string, comment?: string) {
+    return this.prisma.vendorDocument.update({
+      where: { id: documentId },
+      data: { status: 'REJECTED', comment: comment || null },
     });
   }
 }
+
+
+
+
+
+    
