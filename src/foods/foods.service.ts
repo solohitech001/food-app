@@ -1,13 +1,15 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { FoodFeedDto } from './dto/food-feed.dto';
 
-
 const PRICE_LIMITS: Record<'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3', number> = {
   LEVEL_1: 5000,
   LEVEL_2: 15000,
-  // LEVEL_2: 15000,
   LEVEL_3: 50000,
 };
 
@@ -19,7 +21,27 @@ export class FoodsService {
   ) {}
 
   /* ===============================
-     GET ALL FOODS (ADMIN / DEBUG)
+     🔑 HELPER: GET VENDOR BY USER ID
+  =============================== */
+  private async getVendorByUser(userId: string) {
+    console.log('Fetching vendor for userId:', userId); // Debug log
+    if (!userId) {
+      throw new BadRequestException('Invalid user');
+    }
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { userId }, // userId in DB = req.user.id
+    });
+
+    if (!vendor) {
+      throw new ForbiddenException('Vendor not found');
+    }
+
+    return vendor;
+  }
+
+  /* ===============================
+     GET ALL FOODS
   =============================== */
   getAllFoods() {
     return this.prisma.food.findMany({
@@ -28,14 +50,10 @@ export class FoodsService {
   }
 
   /* ===============================
-     CREATE FOOD (ACTIVE VENDORS ONLY)
+     CREATE FOOD
   =============================== */
   async createFood(userId: string, data: any) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { userId },
-    });
-
-    if (!vendor) throw new ForbiddenException('Vendor not found');
+    const vendor = await this.getVendorByUser(userId);
 
     if (vendor.status !== 'ACTIVE') {
       throw new ForbiddenException('Vendor not approved yet');
@@ -51,7 +69,11 @@ export class FoodsService {
 
     return this.prisma.food.create({
       data: {
-        ...data,
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        imageUrl: data.imageUrl,
+        mediaUrl: data.mediaUrl,
         vendorId: vendor.id,
       },
     });
@@ -60,35 +82,33 @@ export class FoodsService {
   /* ===============================
      GET VENDOR FOODS
   =============================== */
-  async getVendorFoods(userId: string) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { userId },
-    });
+ async getVendorFoods(userId: string) {
+  console.log('Getting foods for userId:', userId); // Debug log
+  const vendor = await this.getVendorByUser(userId);
+  console.log('Vendor found:', vendor);
 
-    if (!vendor) throw new ForbiddenException('Vendor not found');
+  const foods = await this.prisma.food.findMany({
+    where: { vendorId: vendor.id },
+  });
+  console.log('Foods found:', foods);
 
-    return this.prisma.food.findMany({
-      where: { vendorId: vendor.id },
-    });
-  }
-
+  return foods;
+}
   /* ===============================
      UPDATE FOOD
   =============================== */
   async updateFood(id: string, userId: string, data: any) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { userId },
+    const vendor = await this.getVendorByUser(userId);
+
+    const food = await this.prisma.food.findUnique({
+      where: { id },
     });
-
-    if (!vendor) throw new ForbiddenException('Vendor not found');
-
-    const food = await this.prisma.food.findUnique({ where: { id } });
 
     if (!food || food.vendorId !== vendor.id) {
       throw new ForbiddenException('Access denied');
     }
 
-    // Enforce price cap only if price is being changed
+    // enforce price cap if updating price
     if (data.price !== undefined) {
       const maxPrice = PRICE_LIMITS[vendor.level];
 
@@ -109,23 +129,23 @@ export class FoodsService {
      DELETE FOOD
   =============================== */
   async deleteFood(id: string, userId: string) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { userId },
+    const vendor = await this.getVendorByUser(userId);
+
+    const food = await this.prisma.food.findUnique({
+      where: { id },
     });
-
-    if (!vendor) throw new ForbiddenException('Vendor not found');
-
-    const food = await this.prisma.food.findUnique({ where: { id } });
 
     if (!food || food.vendorId !== vendor.id) {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.prisma.food.delete({ where: { id } });
+    return this.prisma.food.delete({
+      where: { id },
+    });
   }
 
   /* ===============================
-     PUBLIC SINGLE FOOD
+     GET SINGLE FOOD
   =============================== */
   async getFoodById(id: string) {
     return this.prisma.food.findUnique({
@@ -150,11 +170,15 @@ export class FoodsService {
   =============================== */
   async toggleSave(foodId: string, userId: string) {
     const existing = await this.prisma.foodSave.findUnique({
-      where: { foodId_userId: { foodId, userId } },
+      where: {
+        foodId_userId: { foodId, userId },
+      },
     });
 
     if (existing) {
-      await this.prisma.foodSave.delete({ where: { id: existing.id } });
+      await this.prisma.foodSave.delete({
+        where: { id: existing.id },
+      });
       return { saved: false };
     }
 
@@ -170,11 +194,15 @@ export class FoodsService {
   =============================== */
   async toggleLike(foodId: string, userId: string) {
     const existing = await this.prisma.foodLike.findUnique({
-      where: { foodId_userId: { foodId, userId } },
+      where: {
+        foodId_userId: { foodId, userId },
+      },
     });
 
     if (existing) {
-      await this.prisma.foodLike.delete({ where: { id: existing.id } });
+      await this.prisma.foodLike.delete({
+        where: { id: existing.id },
+      });
       return { liked: false };
     }
 
@@ -221,7 +249,9 @@ export class FoodsService {
         vendor: {
           id: food.vendor.id,
           name: food.vendor.name,
-          handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
+          handle: `@${food.vendor.name
+            .toLowerCase()
+            .replace(/\s+/g, '')}`,
         },
         stats: {
           likes: food.likes.length,

@@ -139,12 +139,27 @@ export class VendorsService {
     });
   }
 
-  async approveDocument(documentId: string) {
-    return this.prisma.vendorDocument.update({
-      where: { id: documentId },
-      data: { status: 'APPROVED' },
-    });
-  }
+// src/vendors/vendors.service.ts
+async approveDocument(documentId: string) {
+  const doc = await this.prisma.vendorDocument.update({
+    where: { id: documentId },
+    data: { status: 'APPROVED' },
+  });
+
+  // Get vendor
+  const vendor = await this.prisma.vendor.findUnique({ 
+    where: { id: doc.vendorId }, 
+    include: { user: true } 
+  });
+
+  // ❌ MISSING: update the user's role
+  await this.prisma.user.update({
+    where: { id: vendor?.userId },
+    data: { role: 'VENDOR' }, // <-- This is what you need
+  });
+
+  return doc;
+}
 
   async rejectDocument(documentId: string, comment?: string) {
     return this.prisma.vendorDocument.update({

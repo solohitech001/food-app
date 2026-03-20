@@ -30,57 +30,56 @@ export class FoodsController {
 
   /* =======================
      🌍 PUBLIC ROUTES
-     ======================= */
+  ======================= */
 
-  // Get all foods (admin / testing / fallback)
   @Get()
   getAllFoods() {
     return this.foodsService.getAllFoods();
   }
 
-  // TikTok-style feed (personalized if logged in)
   @Get('feed')
   getFoodFeed(@Req() req: any) {
-    return this.foodsService.getFoodFeed(req.user?.userId);
-  }
-
-  // Get single food by ID
-  @Get(':id')
-  getFoodById(@Param('id') id: string) {
-    return this.foodsService.getFoodById(id);
+    return this.foodsService.getFoodFeed(req.user?.id);
   }
 
   /* =======================
-     ❤️ LIKE / SAVE / SHARE
-     ======================= */
+     👤 VENDOR ROUTES
+  ======================= */
 
-  // Like / Unlike food
-  @UseGuards(JwtAuthGuard)
-  @Post(':id/like')
-  likeFood(@Param('id') id: string, @Req() req: any) {
-    return this.foodsService.toggleLike(id, req.user.userId);
-  }
-
-  // Save / Unsave food
-  @UseGuards(JwtAuthGuard)
-  @Post(':id/save')
-  saveFood(@Param('id') id: string, @Req() req: any) {
-    return this.foodsService.toggleSave(id, req.user.userId);
-  }
-
-  // Share food (public or logged in)
-  @Post(':id/share')
-  shareFood(@Param('id') id: string, @Req() req: any) {
-    return this.foodsService.shareFood(id, req.user?.userId);
-  }
-
-  /* =======================
-     🏪 VENDOR ROUTES
-     ======================= */
-
-  // Vendor create food (image required, video optional)
+  // Must be **before** the dynamic :id route
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
+  @Get('vendor')
+  getVendorFoods(@Req() req: any) {
+    console.log('Getting foods for vendor userId:', req.user.id); // Debug
+    return this.foodsService.getVendorFoods(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDOR')
+  @Put(':id')
+  updateFood(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: any,
+  ) {
+    console.log('Updating food with id:', id, 'for user:', req.user.id);
+    return this.foodsService.updateFood(id, req.user.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDOR')
+  @Delete(':id')
+  deleteFood(@Param('id') id: string, @Req() req: any) {
+    return this.foodsService.deleteFood(id, req.user.id);
+  }
+
+  /* =======================
+     🏪 VENDOR + ADMIN ROUTES
+  ======================= */
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDOR', 'ADMIN')
   @Post()
   @UseInterceptors(
     FileFieldsInterceptor(
@@ -88,18 +87,13 @@ export class FoodsController {
         { name: 'image', maxCount: 1 },
         { name: 'media', maxCount: 1 },
       ],
-      {
-        storage: memoryStorage(),
-      },
+      { storage: memoryStorage() },
     ),
   )
   async createFood(
     @Req() req: any,
     @UploadedFiles()
-    files: {
-      image?: Express.Multer.File[];
-      media?: Express.Multer.File[];
-    },
+    files: { image?: Express.Multer.File[]; media?: Express.Multer.File[] },
     @Body() body: any,
   ) {
     if (!files.image || files.image.length === 0) {
@@ -110,21 +104,32 @@ export class FoodsController {
       throw new BadRequestException('Name and price are required');
     }
 
-    const userId = req.user.userId;
+    const userId = req.user.id;
+    const imageFile = files.image[0];
 
-    // Upload image
+    if (!imageFile.mimetype.startsWith('image/')) {
+      throw new BadRequestException('Only image files allowed');
+    }
+
     const imageUrl = await this.storageService.uploadFile(
-      files.image[0],
+      imageFile,
       'foods/images/',
     );
 
-    // Upload optional video
     let mediaUrl: string | undefined;
+
     if (files.media && files.media.length > 0) {
-      mediaUrl = await this.storageService.uploadFile(
-        files.media[0],
-        'foods/videos/',
-      );
+      const videoFile = files.media[0];
+
+      if (!videoFile.mimetype.startsWith('video/')) {
+        throw new BadRequestException('Only video files allowed');
+      }
+
+      if (videoFile.size > 50 * 1024 * 1024) {
+        throw new BadRequestException('Video too large (max 50MB)');
+      }
+
+      mediaUrl = await this.storageService.uploadFile(videoFile, 'foods/videos/');
     }
 
     return this.foodsService.createFood(userId, {
@@ -136,31 +141,34 @@ export class FoodsController {
     });
   }
 
-  // Vendor – get own foods
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('VENDOR')
-  @Get('vendor')
-  getVendorFoods(@Req() req: any) {
-    return this.foodsService.getVendorFoods(req.user.userId);
+  /* =======================
+     ❤️ LIKE / SAVE / SHARE
+  ======================= */
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/like')
+  likeFood(@Param('id') id: string, @Req() req: any) {
+    return this.foodsService.toggleLike(id, req.user.id);
   }
 
-  // Vendor – update food
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('VENDOR')
-  @Put(':id')
-  updateFood(
-    @Param('id') id: string,
-    @Req() req: any,
-    @Body() body: any,
-  ) {
-    return this.foodsService.updateFood(id, req.user.userId, body);
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/save')
+  saveFood(@Param('id') id: string, @Req() req: any) {
+    return this.foodsService.toggleSave(id, req.user.id);
   }
 
-  // Vendor – delete food
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('VENDOR')
-  @Delete(':id')
-  deleteFood(@Param('id') id: string, @Req() req: any) {
-    return this.foodsService.deleteFood(id, req.user.userId);
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/share')
+  shareFood(@Param('id') id: string, @Req() req: any) {
+    return this.foodsService.shareFood(id, req.user.id);
+  }
+
+  /* =======================
+     🌍 PUBLIC DYNAMIC ROUTE
+  ======================= */
+
+  @Get(':id')
+  getFoodById(@Param('id') id: string) {
+    return this.foodsService.getFoodById(id);
   }
 }

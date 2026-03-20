@@ -1,7 +1,11 @@
 import { Controller, Get, Patch, UseGuards, Req, Body, Param } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import {UsersService} from './users.service';
+import { UsersService } from './users.service';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
+import { UpdateRoleDto } from './dto/update-role.dto'; // <-- import your new DTO
+// import { AdminGuard } from '../auth/jwt-auth.guard'; // optional, if you create an admin guard
+import { Roles } from 'src/auth/roles.decorator';
+import { RolesGuard } from 'src/auth/role.guard';
 
 @Controller('users')
 export class UsersController {
@@ -34,4 +38,15 @@ export class UsersController {
   getAllUsers() {
     return this.usersService.getAllUsers();
   }
+
+  // Admin: update user role
+
+
+  // Admin: update user role
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+@Patch(':id/role')
+updateUserRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+  return this.usersService.updateUserRole(id, dto.role);
+}
 }

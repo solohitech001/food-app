@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/com
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -93,5 +94,21 @@ export class UsersService {
     });
     if (!user) throw new BadRequestException('User not found');
     return user;
+  }
+
+    /* ============================
+     UPDATE USER ROLE (ADMIN)
+  ============================ */
+  async updateUserRole(userId: string, role: Role) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new BadRequestException('User not found');
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+    });
   }
 }
