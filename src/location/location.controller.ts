@@ -8,12 +8,16 @@ import {
   Param,
   ForbiddenException,
 } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/role.guard';
 import { Roles } from '../auth/roles.decorator';
 import { LocationService } from './location.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateLocationDto } from './dto/update-location.dto';
+import { CreateLocationDto } from './dto/create-location.dto';
 
+@ApiTags('Location')
 @Controller('location')
 export class LocationController {
   constructor(
@@ -24,9 +28,15 @@ export class LocationController {
   /* ==================================
      USER → UPDATE LOCATION
   ================================== */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user location' })
+  @ApiResponse({ status: 200, description: 'User location updated successfully' })
   @UseGuards(JwtAuthGuard)
   @Post('user')
-  async updateUserLocation(@Req() req: any, @Body() body: any) {
+  async updateUserLocation(
+    @Req() req: any,
+    @Body() body: UpdateLocationDto,
+  ) {
     const { latitude, longitude, city, state } = body;
 
     if (!latitude || !longitude) {
@@ -34,7 +44,7 @@ export class LocationController {
     }
 
     return this.prisma.user.update({
-      where: { id: req.user.id }, // ✅ FIXED
+      where: { id: req.user.id },
       data: {
         latitude,
         longitude,
@@ -47,12 +57,17 @@ export class LocationController {
   /* ==================================
      VENDOR → UPDATE LOCATION
   ================================== */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update vendor location' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Post('vendor')
-  async updateVendorLocation(@Req() req: any, @Body() body: any) {
+  async updateVendorLocation(
+    @Req() req: any,
+    @Body() body: UpdateLocationDto,
+  ) {
     const vendor = await this.prisma.vendor.findUnique({
-      where: { userId: req.user.id }, // ✅ FIXED
+      where: { userId: req.user.id },
     });
 
     if (!vendor) throw new ForbiddenException('Vendor not found');
@@ -66,19 +81,20 @@ export class LocationController {
   /* ==================================
      VENDOR → CREATE DELIVERY ZONE
   ================================== */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create delivery zone for vendor' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Post('zones')
-  async createZone(@Req() req: any, @Body() body: any) {
+  async createZone(
+    @Req() req: any,
+    @Body() body: CreateLocationDto,
+  ) {
     const vendor = await this.prisma.vendor.findUnique({
-      where: { userId: req.user.id }, // ✅ FIXED
+      where: { userId: req.user.id },
     });
 
     if (!vendor) throw new ForbiddenException('Vendor not found');
-
-    if (!body.name || !body.polygon) {
-      throw new ForbiddenException('Zone name and polygon required');
-    }
 
     return this.prisma.vendorZone.create({
       data: {
@@ -92,12 +108,14 @@ export class LocationController {
   /* ==================================
      VENDOR → LIST DELIVERY ZONES
   ================================== */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get vendor delivery zones' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Get('zones')
   async getZones(@Req() req: any) {
     const vendor = await this.prisma.vendor.findUnique({
-      where: { userId: req.user.id }, // ✅ FIXED
+      where: { userId: req.user.id },
     });
 
     if (!vendor) {
@@ -112,11 +130,22 @@ export class LocationController {
   /* ==================================
      PUBLIC → CHECK DELIVERY AVAILABILITY
   ================================== */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check if user can order from vendor' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns whether user can order',
+    schema: {
+      example: {
+        canOrder: true,
+      },
+    },
+  })
   @UseGuards(JwtAuthGuard)
   @Get('can-order/:vendorId')
   async canOrder(@Req() req: any, @Param('vendorId') vendorId: string) {
     const allowed = await this.locationService.canUserOrder(
-      req.user.id, // ✅ FIXED
+      req.user.id,
       vendorId,
     );
 
