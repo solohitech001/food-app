@@ -4,8 +4,7 @@ export class UserProfileResponseDto {
   @ApiProperty({ example: 'user-id-uuid' })
   id: string;
 
-  @ApiProperty({ example: 'solomon@gmail.com' })
-  // email: string;
+  @ApiProperty({ example: 'solomon@gmail.com', nullable: true })
   email: string | null;
 
   @ApiProperty({ example: true })
@@ -13,6 +12,22 @@ export class UserProfileResponseDto {
 
   @ApiProperty({ example: 'VENDOR' })
   role: string;
+
+  // ✅ ADD THIS (WALLET)
+  @ApiProperty({
+  description: 'User wallet details',
+  example: {
+    accountNumber: '1234567890',
+    bankName: 'Wema Bank',
+    balance: 5000,
+  },
+  nullable: true,
+})
+wallet?: {
+  accountNumber: string;
+  bankName: string;
+  balance: number; // ✅ ADD THIS
+} | null;
 
   @ApiProperty({
     description: 'Vendor info if user is a vendor',

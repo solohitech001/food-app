@@ -38,6 +38,7 @@ enum OrderStatus {
   PENDING
   PREPARING
   DELIVERED
+  COMPLETED
   CANCELLED
 }
 
@@ -60,9 +61,10 @@ enum TransactionType {
 }
 
 enum TransactionSource {
-  FLUTTERWAVE
   TRANSFER
   WITHDRAWAL
+  FLUTTERWAVE
+  ESCROW
 }
 
 enum EscrowStatus {
@@ -75,6 +77,7 @@ enum VendorLevel {
   LEVEL_1
   LEVEL_2
   LEVEL_3
+  LEVEL_4
 }
 
 /**
@@ -96,16 +99,16 @@ model User {
   city      String?
   state     String?
 
-  otpCode      String?
-  otpExpiresAt DateTime?
+  otpCode       String?
+  otpExpiresAt  DateTime?
   lastOtpSentAt DateTime?
 
   createdAt DateTime @default(now())
 
-  vendor     Vendor?
-  wallet     Wallet?
-  orders     Order[]
-  reviews    Review[]   // ✅ FIXED
+  vendor  Vendor?
+  wallet  Wallet?
+  orders  Order[]
+  reviews Review[]
 
   foodLikes  FoodLike[]
   foodSaves  FoodSave[]
@@ -141,8 +144,11 @@ model Vendor {
   vendorDocuments VendorDocument[]
   orders          Order[]
 
-  reviews Review[]          // ✅ FIXED
-  badges  VendorBadge[]     // ✅ FIXED
+  accountNumber String?
+  bankCode      String?
+
+  reviews Review[]
+  badges  VendorBadge[]
 
   createdAt DateTime @default(now())
 }
@@ -204,6 +210,8 @@ model Food {
   saves  FoodSave[]
   shares FoodShare[]
 
+  orderItems OrderItem[]
+
   createdAt DateTime @default(now())
 }
 
@@ -259,7 +267,10 @@ model Wallet {
   userId   String? @unique
   vendorId String? @unique
 
-  balance        Float  @default(0)
+  balance Float  @default(0)
+  currency String @default("NGN")
+  version  Int    @default(0)
+
   accountNumber  String @unique
   bankName       String
   flutterwaveRef String
@@ -272,6 +283,7 @@ model Wallet {
   vendor Vendor? @relation(fields: [vendorId], references: [id])
 
   transactions Transaction[]
+  withdrawals  Withdrawal[]
 
   escrowsHeld     Escrow[] @relation("UserEscrow")
   escrowsToVendor Escrow[] @relation("VendorEscrow")
@@ -279,13 +291,14 @@ model Wallet {
 
 /**
  * =====================
- * TRANSACTIONS
+ * TRANSACTION
  * =====================
  */
 
 model Transaction {
   id       String @id @default(uuid())
   walletId String
+  userId   String?
 
   amount Float
   type   TransactionType
@@ -294,6 +307,9 @@ model Transaction {
   reference String @unique
   narration String
 
+  status       String @default("SUCCESS")
+  balanceAfter Float?
+
   createdAt DateTime @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id])
@@ -301,26 +317,70 @@ model Transaction {
 
 /**
  * =====================
- * ORDERS
+ * WITHDRAWALS
+ * =====================
+ */
+
+model Withdrawal {
+  id        String   @id @default(uuid())
+  walletId  String
+  amount    Float
+  status    String
+  reference String   @unique
+
+  createdAt DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+}
+
+/**
+ * =====================
+ * ORDER ITEMS
+ * =====================
+ */
+
+model OrderItem {
+  id       String @id @default(uuid())
+  orderId  String
+  foodId   String
+  quantity Int    @default(1)
+  price    Float
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+  food  Food  @relation(fields: [foodId], references: [id])
+
+  @@unique([orderId, foodId])
+}
+
+/**
+ * =====================
+ * ORDER
  * =====================
  */
 
 model Order {
-  id        String      @id @default(uuid())
-  userId    String
-  vendorId  String
-  amount    Float
-  status    OrderStatus @default(PENDING)
+  id          String      @id @default(uuid())
+  userId      String
+  vendorId    String
+  amount      Float
+  status      OrderStatus @default(PENDING)
 
-  acceptBy  DateTime
+  paymentStatus String @default("PENDING")
 
-  createdAt DateTime @default(now())
+  acceptBy    DateTime
+  reference   String      @unique
+  deliveredAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
 
   user   User   @relation(fields: [userId], references: [id])
   vendor Vendor @relation(fields: [vendorId], references: [id])
 
-  escrow  Escrow?
-  review  Review?   // ✅ ONE review per order
+  items OrderItem[]
+  escrow Escrow?
+  review Review?
 }
 
 /**
@@ -335,9 +395,11 @@ model Escrow {
   walletId       String
   vendorWalletId String
 
+  
+
   amount Float
   status EscrowStatus @default(HELD)
-
+  reference       String   @unique  
   createdAt  DateTime  @default(now())
   releasedAt DateTime?
   refundedAt DateTime?
@@ -354,10 +416,10 @@ model Escrow {
  */
 
 model Review {
-  id        String   @id @default(uuid())
-  orderId   String   @unique
-  vendorId  String
-  userId    String
+  id       String @id @default(uuid())
+  orderId  String @unique
+  vendorId String
+  userId   String
 
   rating  Int
   comment String?
@@ -395,6 +457,9 @@ model WebhookEvent {
   id        String   @id @default(uuid())
   reference String   @unique
   source    String
+  status    String   @default("PROCESSED")
+  payload   Json?
+
   createdAt DateTime @default(now())
 }
 

@@ -11,52 +11,66 @@ export class UsersService {
   /* ============================
      GET CURRENT USER PROFILE
   ============================ */
-  async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        vendor: {
-          include: {
-            vendorDocuments: true, // ensure your Prisma schema has `vendorDocuments` relation
-          },
+async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      wallet: true, // ✅ include wallet
+      vendor: {
+        include: {
+          vendorDocuments: true,
         },
       },
-    });
+    },
+  });
 
-    if (!user) throw new BadRequestException('User not found');
+  if (!user) throw new BadRequestException('User not found');
 
-    // Transform vendor documents if vendor exists
-    const documents = user.vendor?.vendorDocuments.map(doc => ({
-      id: doc.id,
-      type: doc.type,
-      fileUrl: doc.fileUrl,
-      status: doc.status,
-      comment: doc.comment,
-      createdAt: doc.createdAt,
-    }));
+  // Transform vendor documents
+  const documents = user.vendor?.vendorDocuments.map(doc => ({
+    id: doc.id,
+    type: doc.type,
+    fileUrl: doc.fileUrl,
+    status: doc.status,
+    comment: doc.comment,
+    createdAt: doc.createdAt,
+  })) || [];
 
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      vendor: user.vendor
-        ? {
-            id: user.vendor.id,
-            name: user.vendor.name,
-            status: user.vendor.status,
-            level: user.vendor.level,
-            location: {
-              city: user.vendor.city,
-              state: user.vendor.state,
-              latitude: user.vendor.latitude,
-              longitude: user.vendor.longitude,
-            },
-          }
-        : null,
-      documents: documents || [],
-    };
-  }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isVerified: user.isVerified,
+
+    // ✅ WALLET (ACCOUNT NUMBER)
+    wallet: user.wallet
+  ? {
+      accountNumber: user.wallet.accountNumber,
+      bankName: user.wallet.bankName,
+      balance: user.wallet.balance, // ✅ ADD THIS
+    }
+  : null,
+
+    // ✅ VENDOR
+    vendor: user.vendor
+      ? {
+          id: user.vendor.id,
+          name: user.vendor.name,
+          status: user.vendor.status,
+          level: user.vendor.level,
+          location: {
+            city: user.vendor.city,
+            state: user.vendor.state,
+            latitude: user.vendor.latitude,
+            longitude: user.vendor.longitude,
+          },
+        }
+      : null,
+
+    // ✅ DOCUMENTS
+    documents,
+  };
+}
 
   /* ============================
      UPDATE CURRENT USER PROFILE

@@ -20,7 +20,7 @@ export class WalletWebhookController {
     @Headers('verif-hash') signature: string,
     @Body() payload: any,
   ) {
-    // 1️⃣ Verify signature
+    // 🔒 1. Verify signature
     if (!this.flutterwave.verifySignature(signature)) {
       throw new ForbiddenException('Invalid webhook signature');
     }
@@ -28,28 +28,28 @@ export class WalletWebhookController {
     const event = payload?.event;
     const data = payload?.data;
 
-    // 2️⃣ Accept ONLY successful charges
+    // 🔍 2. Only process successful charges
     if (event !== 'charge.completed') {
       return { ignored: true, reason: 'Unhandled event' };
     }
 
-    if (data.status !== 'successful') {
+    if (data?.status !== 'successful') {
       return { ignored: true, reason: 'Payment not successful' };
     }
 
-    // 3️⃣ Validate required fields
+    // 🛑 3. Validate payload
     if (
-      !data.account_number ||
-      !data.amount ||
-      !data.flw_ref ||
-      !data.currency
+      !data?.account_number ||
+      !data?.amount ||
+      !data?.flw_ref ||
+      !data?.currency
     ) {
       return { ignored: true, reason: 'Incomplete payload' };
     }
 
-    // 4️⃣ Credit wallet safely
-    return this.walletService.creditWalletFromWebhook({
-      account_number: data.account_number,
+    // 💰 4. Credit wallet safely
+    return this.walletService.handleFlutterwaveWebhook({
+      accountNumber: data.account_number,
       amount: Number(data.amount),
       currency: data.currency,
       reference: data.flw_ref,

@@ -14,9 +14,15 @@ export class WalletService {
   ) {}
 
   /* ============================
-     CREATE USER WALLET (REAL)
+     CREATE USER WALLET
   ============================ */
   async createUserWallet(userId: string) {
+    const existing = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (existing) return existing;
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -25,9 +31,11 @@ export class WalletService {
       throw new BadRequestException('User email is required');
     }
 
+    const reference = `PLATTER-${userId}-${Date.now()}`;
+
     const flwAccount = await this.flutterwave.createVirtualAccount(
       user.email,
-      'Platter User Wallet',
+      reference,
     );
 
     return this.prisma.wallet.create({
@@ -35,15 +43,22 @@ export class WalletService {
         userId,
         accountNumber: flwAccount.account_number,
         bankName: flwAccount.bank_name,
-        flutterwaveRef: flwAccount.order_ref,
+        flutterwaveRef: reference,
+        balance: 0,
       },
     });
   }
 
   /* ============================
-     CREATE VENDOR WALLET (REAL)
+     CREATE VENDOR WALLET
   ============================ */
   async createVendorWallet(vendorId: string) {
+    const existing = await this.prisma.wallet.findUnique({
+      where: { vendorId },
+    });
+
+    if (existing) return existing;
+
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
       include: { user: true },
@@ -53,9 +68,11 @@ export class WalletService {
       throw new BadRequestException('Vendor email is required');
     }
 
+    const reference = `PLATTER-VENDOR-${vendorId}-${Date.now()}`;
+
     const flwAccount = await this.flutterwave.createVirtualAccount(
       vendor.user.email,
-      vendor.name,
+      reference,
     );
 
     return this.prisma.wallet.create({
@@ -63,20 +80,25 @@ export class WalletService {
         vendorId,
         accountNumber: flwAccount.account_number,
         bankName: flwAccount.bank_name,
-        flutterwaveRef: flwAccount.order_ref,
+        flutterwaveRef: reference,
+        balance: 0,
       },
     });
   }
 
   /* ============================
-     GET MY WALLET
+     GET WALLET
   ============================ */
   async getMyWallet(userId: string) {
     const wallet = await this.prisma.wallet.findFirst({
       where: {
         OR: [{ userId }, { vendor: { userId } }],
       },
-      include: { transactions: true },
+      include: {
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
 
     if (!wallet) throw new BadRequestException('Wallet not found');
@@ -85,7 +107,69 @@ export class WalletService {
   }
 
   /* ============================
-     USER → VENDOR TRANSFER
+     GET BALANCE ONLY
+  ============================ */
+  async getBalance(userId: string) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!wallet) throw new BadRequestException('Wallet not found');
+
+    return { balance: wallet.balance };
+  }
+
+  /* ============================
+     CREDIT (INTERNAL USE)
+  ============================ */
+  async credit(walletId: string, amount: number, reference: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const exists = await tx.transaction.findUnique({
+        where: { reference },
+      });
+
+      if (exists) return;
+
+      const updated = await tx.wallet.update({
+        where: { id: walletId },
+        data: { balance: { increment: amount } },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId,
+          amount,
+          type: 'CREDIT',
+          source: 'FLUTTERWAVE',
+          reference,
+          narration: 'Wallet funding',
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  /* ============================
+     DEBIT (INTERNAL USE)
+  ============================ */
+  async debit(walletId: string, amount: number) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!wallet || wallet.balance < amount) {
+      throw new ForbiddenException('Insufficient balance');
+    }
+
+    return this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { balance: { decrement: amount } },
+    });
+  }
+
+  /* ============================
+     TRANSFER USER → VENDOR
   ============================ */
   async transferToVendor(userId: string, vendorId: string, amount: number) {
     const userWallet = await this.prisma.wallet.findUnique({
@@ -103,6 +187,8 @@ export class WalletService {
     if (userWallet.balance < amount) {
       throw new ForbiddenException('Insufficient balance');
     }
+
+    const reference = `TX-${Date.now()}`;
 
     return this.prisma.$transaction(async (tx) => {
       await tx.wallet.update({
@@ -122,7 +208,7 @@ export class WalletService {
             amount,
             type: 'DEBIT',
             source: 'TRANSFER',
-            reference: `TX-${Date.now()}`,
+            reference,
             narration: 'Payment to vendor',
           },
           {
@@ -130,7 +216,7 @@ export class WalletService {
             amount,
             type: 'CREDIT',
             source: 'TRANSFER',
-            reference: `TX-${Date.now()}`,
+            reference,
             narration: 'Payment from customer',
           },
         ],
@@ -141,7 +227,7 @@ export class WalletService {
   }
 
   /* ============================
-     VENDOR WITHDRAW (LIMITED)
+     WITHDRAW
   ============================ */
   async withdraw(vendorId: string, amount: number) {
     const wallet = await this.prisma.wallet.findUnique({
@@ -150,21 +236,32 @@ export class WalletService {
 
     if (!wallet) throw new BadRequestException('Wallet not found');
 
-    if (wallet.withdrawalsThisMonth >= 2) {
-      throw new ForbiddenException('Monthly withdrawal limit reached');
-    }
-
     if (wallet.balance < amount) {
       throw new ForbiddenException('Insufficient balance');
     }
 
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id: vendorId },
+    });
+
+    if (!vendor?.accountNumber || !vendor.bankCode) {
+      throw new BadRequestException('Vendor bank details missing');
+    }
+
+    const reference = `WD-${vendorId}-${Date.now()}`;
+
     return this.prisma.$transaction(async (tx) => {
       await tx.wallet.update({
         where: { id: wallet.id },
-        data: {
-          balance: { decrement: amount },
-          withdrawalsThisMonth: { increment: 1 },
-        },
+        data: { balance: { decrement: amount } },
+      });
+
+      await this.flutterwave.initiateTransfer({
+        amount,
+        accountNumber: vendor.accountNumber!,
+        bankCode: vendor.bankCode!,
+        narration: 'Vendor withdrawal',
+        reference,
       });
 
       await tx.transaction.create({
@@ -173,8 +270,8 @@ export class WalletService {
           amount,
           type: 'DEBIT',
           source: 'WITHDRAWAL',
-          reference: `WD-${Date.now()}`,
-          narration: 'Vendor withdrawal',
+          reference,
+          narration: 'Withdrawal to bank',
         },
       });
 
@@ -182,95 +279,10 @@ export class WalletService {
     });
   }
 
-  async creditWalletFromFlutterwave(
-    accountNumber: string,
-    amount: number,
-    reference: string,
-  ) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { accountNumber },
-    });
-
-    if (!wallet) {
-      throw new BadRequestException('Wallet not found');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      // Credit wallet
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: { increment: amount },
-        },
-      });
-
-      // Create transaction record
-      await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          amount,
-          type: 'CREDIT',
-          source: 'FLUTTERWAVE',
-          reference,
-          narration: 'Wallet funding via Flutterwave',
-        },
-      });
-
-      return { message: 'Wallet credited successfully' };
-    });
-  }
-
-  async creditWalletFromWebhook(data: {
-    account_number: string;
-    amount: number;
-    currency: string;
-    reference: string;
-  }) {
-    const { account_number, amount, currency, reference } = data;
-
-    if (currency !== 'NGN') {
-      throw new BadRequestException('Invalid currency');
-    }
-
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { accountNumber: account_number },
-    });
-
-    if (!wallet) {
-      throw new BadRequestException('Wallet not found');
-    }
-
-    // ✅ Idempotency check
-    const existingTx = await this.prisma.transaction.findUnique({
-      where: { reference },
-    });
-
-    if (existingTx) {
-      return { ignored: true, reason: 'Duplicate webhook' };
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: amount } },
-      });
-
-      await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          amount,
-          type: 'CREDIT',
-          source: 'FLUTTERWAVE',
-          reference,
-          narration: 'Wallet funding via Flutterwave',
-        },
-      });
-
-      return { credited: true };
-    });
-  }
-
-  async processFlutterwaveFunding(payload: {
+  /* ============================
+     FLUTTERWAVE WEBHOOK CREDIT
+  ============================ */
+  async handleFlutterwaveWebhook(payload: {
     reference: string;
     accountNumber: string;
     amount: number;
@@ -278,19 +290,15 @@ export class WalletService {
   }) {
     const { reference, accountNumber, amount, currency } = payload;
 
-    // 1️⃣ Idempotency check
+    if (currency !== 'NGN') {
+      throw new BadRequestException('Invalid currency');
+    }
+
     const exists = await this.prisma.webhookEvent.findUnique({
       where: { reference },
     });
 
-    if (exists) {
-      return { duplicate: true };
-    }
-
-    // 2️⃣ Currency validation
-    if (currency !== 'NGN') {
-      throw new BadRequestException('Invalid currency');
-    }
+    if (exists) return { duplicate: true };
 
     const wallet = await this.prisma.wallet.findUnique({
       where: { accountNumber },
@@ -300,8 +308,7 @@ export class WalletService {
       throw new BadRequestException('Wallet not found');
     }
 
-    // 3️⃣ Atomic credit
-    await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await tx.wallet.update({
         where: { id: wallet.id },
         data: { balance: { increment: amount } },
@@ -324,9 +331,9 @@ export class WalletService {
           source: 'FLUTTERWAVE',
         },
       });
-    });
 
-    return { credited: true };
+      return { credited: true };
+    });
   }
 
   async findByUserId(userId: string) {
@@ -341,10 +348,7 @@ export class WalletService {
   }) {
     return this.prisma.wallet.create({
       data: {
-        userId: data.userId,
-        accountNumber: data.accountNumber,
-        bankName: data.bankName,
-        flutterwaveRef: data.flutterwaveRef,
+        ...data,
         balance: 0,
       },
     });
@@ -355,25 +359,29 @@ export class WalletService {
     amount: number,
     reference: string,
   ) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { accountNumber },
+    });
+
+    if (!wallet) {
+      throw new BadRequestException('Wallet not found');
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({
-        where: { accountNumber },
-      });
-
-      if (!wallet) return;
-
-      // ⛔ prevent duplicate credits
+      // 🔒 Idempotency check (VERY IMPORTANT)
       const exists = await tx.transaction.findUnique({
         where: { reference },
       });
 
-      if (exists) return;
+      if (exists) return { duplicate: true };
 
+      // 💰 Credit wallet
       await tx.wallet.update({
         where: { id: wallet.id },
         data: { balance: { increment: amount } },
       });
 
+      // 🧾 Log transaction
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
@@ -381,9 +389,24 @@ export class WalletService {
           type: 'CREDIT',
           source: 'FLUTTERWAVE',
           reference,
-          narration: 'Wallet funding',
+          narration: 'Wallet funded via Flutterwave',
         },
       });
+
+      return { success: true };
+    });
+  }
+
+  async creditWalletFromFlutterwave(
+    accountNumber: string,
+    amount: number,
+    reference: string,
+  ) {
+    return this.handleFlutterwaveWebhook({
+      reference,
+      accountNumber,
+      amount,
+      currency: 'NGN',
     });
   }
 }

@@ -14,7 +14,7 @@ import { RolesGuard } from '../auth/role.guard';
 import { Roles } from '../auth/roles.decorator';
 import { LocationService } from './location.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateLocationDto } from './dto/update-location.dto';
+import { UpdateUserLocationDto } from './dto/update-location.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 
 @ApiTags('Location')
@@ -35,7 +35,7 @@ export class LocationController {
   @Post('user')
   async updateUserLocation(
     @Req() req: any,
-    @Body() body: UpdateLocationDto,
+    @Body() body: UpdateUserLocationDto,
   ) {
     const { latitude, longitude, city, state } = body;
 
@@ -64,7 +64,7 @@ export class LocationController {
   @Post('vendor')
   async updateVendorLocation(
     @Req() req: any,
-    @Body() body: UpdateLocationDto,
+    @Body() body: UpdateUserLocationDto,
   ) {
     const vendor = await this.prisma.vendor.findUnique({
       where: { userId: req.user.id },

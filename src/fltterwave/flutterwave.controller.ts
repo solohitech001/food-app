@@ -24,7 +24,7 @@ export class FlutterwaveController {
    * =====================================
    * POST /flutterwave/virtual-account
    */
-  @UseGuards(JwtAuthGuard) 
+  @UseGuards(JwtAuthGuard)
   @Post('virtual-account')
   async createVirtualAccount(@Req() req) {
     const user = req.user;
@@ -51,7 +51,7 @@ export class FlutterwaveController {
         reference,
       );
 
-    // 💾 Persist wallet (matches Prisma schema)
+    // 💾 Persist wallet
     return this.walletService.create({
       userId: user.id,
       accountNumber: account.account_number,
@@ -77,15 +77,18 @@ export class FlutterwaveController {
     }
 
     const data = this.flutterwaveService.extractFundingData(payload);
+
     if (!data) {
       return { status: 'ignored' };
     }
 
-    await this.walletService.creditWalletByAccountNumber(
-      data.accountNumber,
-      data.amount,
-      data.reference,
-    );
+    // ✅ FIXED HERE (PROPER METHOD)
+    await this.walletService.handleFlutterwaveWebhook({
+      reference: data.reference,
+      accountNumber: data.accountNumber,
+      amount: data.amount,
+      currency: 'NGN',
+    });
 
     return { status: 'success' };
   }

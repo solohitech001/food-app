@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class UpdateLocationDto {
+export class UpdateUserLocationDto {
   @ApiProperty({
     example: 6.5244,
     description: 'Latitude of the user location',
@@ -9,7 +9,7 @@ export class UpdateLocationDto {
 
   @ApiProperty({
     example: 3.3792,
-    description: 'Longitude of the user location',
+    description: 'Longitude of  the user location',
   })
   longitude: number;
 
