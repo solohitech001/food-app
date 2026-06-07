@@ -1,35 +1,29 @@
 import { PrismaClient, Role, VendorStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = await bcrypt.hash('Admin@123', 10);
-  const vendorPassword = await bcrypt.hash('Vendor@123', 10);
-
-  // ADMIN
-  await prisma.user.upsert({
+  // ADMIN (OTP-based)
+  const adminUser = await prisma.user.upsert({
     where: {
-      email: 'admin@foodapp.com',
+      phoneNumber: '+2349150242622',
     },
     update: {},
     create: {
-      email: 'admin@foodapp.com',
-      password: adminPassword,
+      phoneNumber: '+2349150242622',
       role: Role.ADMIN,
       isVerified: true,
     },
   });
 
-  // VENDOR
+  // VENDOR (OTP-based)
   const vendorUser = await prisma.user.upsert({
     where: {
-      email: 'vendor@foodapp.com',
+      phoneNumber: '+2349066294339',
     },
     update: {},
     create: {
-      email: 'vendor@foodapp.com',
-      password: vendorPassword,
+      phoneNumber: '+2349066294339',
       role: Role.VENDOR,
       isVerified: true,
     },
@@ -50,7 +44,7 @@ async function main() {
     },
   });
 
-  console.log('Seed completed');
+  console.log('OTP-only seed completed');
 }
 
 main()
