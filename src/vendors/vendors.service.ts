@@ -15,7 +15,7 @@ import { Express } from 'express';
 export class VendorsService {
   private s3 = new S3Client({
     region: 'eu-central-1',
-  credentials: {
+    credentials: {
       accessKeyId: 'BO2MFYSYNZCFUV9U8LTN',
       secretAccessKey: 'jaYJNU1qJIV1mIHnjHqmYOY5BfiECurRAiJo0nwV',
     },
@@ -34,8 +34,7 @@ export class VendorsService {
     const existingVendor = await this.prisma.vendor.findUnique({
       where: { userId },
     });
-    if (existingVendor)
-      throw new BadRequestException('Vendor already exists');
+    if (existingVendor) throw new BadRequestException('Vendor already exists');
 
     return this.prisma.vendor.create({
       data: {
@@ -47,10 +46,7 @@ export class VendorsService {
   }
 
   /* UPDATE PROFILE */
-  async updateVendorProfile(
-    vendorId: string,
-    dto: UpdateVendorProfileDto,
-  ) {
+  async updateVendorProfile(vendorId: string, dto: UpdateVendorProfileDto) {
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
     });
@@ -139,27 +135,27 @@ export class VendorsService {
     });
   }
 
-// src/vendors/vendors.service.ts
-async approveDocument(documentId: string) {
-  const doc = await this.prisma.vendorDocument.update({
-    where: { id: documentId },
-    data: { status: 'APPROVED' },
-  });
+  // src/vendors/vendors.service.ts
+  async approveDocument(documentId: string) {
+    const doc = await this.prisma.vendorDocument.update({
+      where: { id: documentId },
+      data: { status: 'APPROVED' },
+    });
 
-  // Get vendor
-  const vendor = await this.prisma.vendor.findUnique({ 
-    where: { id: doc.vendorId }, 
-    include: { user: true } 
-  });
+    // Get vendor
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id: doc.vendorId },
+      include: { user: true },
+    });
 
-  // ❌ MISSING: update the user's role
-  await this.prisma.user.update({
-    where: { id: vendor?.userId },
-    data: { role: 'VENDOR' }, // <-- This is what you need
-  });
+    // ❌ MISSING: update the user's role
+    await this.prisma.user.update({
+      where: { id: vendor?.userId },
+      data: { role: 'VENDOR' }, // <-- This is what you need
+    });
 
-  return doc;
-}
+    return doc;
+  }
 
   async rejectDocument(documentId: string, comment?: string) {
     return this.prisma.vendorDocument.update({
@@ -167,10 +163,172 @@ async approveDocument(documentId: string) {
       data: { status: 'REJECTED', comment: comment || null },
     });
   }
+
+  // Add this method inside your VendorsService class
+
+  /* FETCH METRICS FOR VENDOR DASHBOARD */
+  async getVendorMetrics(vendorId: string) {
+    const [totalOrders, successful, cancelled, pending] =
+      await this.prisma.$transaction([
+        // 1. Total Orders assigned to this vendor
+        this.prisma.order.count({
+          where: { vendorId },
+        }),
+
+        // 2. Successful Orders (Mapped to COMPLETED status)
+        this.prisma.order.count({
+          where: {
+            vendorId,
+            status: 'COMPLETED',
+          },
+        }),
+
+        // 3. Cancelled Orders
+        this.prisma.order.count({
+          where: {
+            vendorId,
+            status: 'CANCELLED',
+          },
+        }),
+
+        // 4. Pending Orders (Orders currently active in downstream processing)
+        this.prisma.order.count({
+          where: {
+            vendorId,
+            status: { in: ['PENDING', 'PREPARING', 'DELIVERED'] },
+          },
+        }),
+      ]);
+
+    return {
+      totalOrders,
+      successful,
+      cancelled,
+      pending,
+    };
+  }
+
+  /* FETCH HISTORICAL CONSUMER ACTIVITY FOR USER */
+  async getUserActivity(userId: string) {
+    // 1. Get total order volume placed by user
+    const totalOrdersCount = await this.prisma.order.count({
+      where: { userId },
+    });
+
+    // 2. Get count of distinct vendors the user has purchased meals from
+    const distinctVendorsAggregation = await this.prisma.order.groupBy({
+      by: ['vendorId'],
+      where: { userId },
+    });
+    const uniqueVendorsCount = distinctVendorsAggregation.length;
+
+    // 3. Get total distinct unique dishes/meals ordered by the user
+    const userOrders = await this.prisma.order.findMany({
+      where: { userId },
+      select: {
+        items: {
+          select: { foodId: true },
+        },
+      },
+    });
+
+    const uniqueFoodIds = new Set<string>();
+    userOrders.forEach((order) => {
+      order.items.forEach((item) => uniqueFoodIds.add(item.foodId));
+    });
+
+    return {
+      orders: totalOrdersCount,
+      vendors: uniqueVendorsCount,
+      meals: uniqueFoodIds.size,
+    };
+  }
+
+  // Add this method inside your VendorsService class
+
+  /* GET COMBINED DASHBOARD OVERVIEW FOR A USER */
+  async getDashboardOverview(userId: string) {
+    // 1. Get user consumer activity metrics
+    const activity = await this.getUserActivity(userId);
+
+    // 2. Default fallback metrics structure
+    let vendorMetrics = {
+      totalOrders: 0,
+      successful: 0,
+      cancelled: 0,
+      pending: 0,
+    };
+
+    // 3. Find if this user is a registered vendor
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { userId },
+    });
+
+    // 4. If they are a vendor, populate metrics
+    if (vendor) {
+      vendorMetrics = await this.getVendorMetrics(vendor.id);
+    }
+
+    return {
+      vendorMetrics,
+      activity,
+    };
+  }
+
+  // Add to src/vendors/vendors.service.ts
+
+  /* SEARCH MEALS AND VENDORS */
+  async searchMarketplace(searchQuery?: string) {
+    // If no query string is provided, return empty collections safely
+    if (!searchQuery || !searchQuery.trim()) {
+      return { vendors: [], meals: [] };
+    }
+
+    const cleanQuery = searchQuery.trim();
+
+    // Query both tables simultaneously using an optimized Promise wrapper
+    const [vendors, meals] = await Promise.all([
+      // 1. Search Vendors table matching by name, city, or state
+      this.prisma.vendor.findMany({
+        where: {
+          OR: [
+            { name: { contains: cleanQuery, mode: 'insensitive' } },
+            { city: { contains: cleanQuery, mode: 'insensitive' } },
+            { state: { contains: cleanQuery, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          state: true,
+          level: true,
+        },
+        take: 20, // Guardrail pagination limits for mobile rendering
+      }),
+
+      // 2. Search Foods/Meals matching by name or description fields
+      this.prisma.food.findMany({
+        where: {
+          OR: [
+            { name: { contains: cleanQuery, mode: 'insensitive' } },
+            { description: { contains: cleanQuery, mode: 'insensitive' } },
+          ],
+        },
+        include: {
+          vendor: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        take: 30,
+      }),
+    ]);
+
+    return {
+      vendors,
+      meals,
+    };
+  }
 }
-
-
-
-
-
-    

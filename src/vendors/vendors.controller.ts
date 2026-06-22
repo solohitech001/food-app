@@ -27,6 +27,13 @@ import { ApproveRejectVendorDto } from './dto/ApproveRejectDocumentDto';
 export class VendorsController {
   constructor(private vendorsService: VendorsService) {}
 
+  @Get('dashboard/overview')
+  @UseGuards(JwtAuthGuard)
+  async getDashboardSummary(@Req() req) {
+    const userId = req.user.id;
+    return this.vendorsService.getDashboardOverview(userId);
+  }
+
   /* CREATE */
   @UseGuards(JwtAuthGuard)
   @Post('onboard')
@@ -38,10 +45,7 @@ export class VendorsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Post(':id/profile')
-  updateProfile(
-    @Param('id') id: string,
-    @Body() dto: UpdateVendorProfileDto,
-  ) {
+  updateProfile(@Param('id') id: string, @Body() dto: UpdateVendorProfileDto) {
     return this.vendorsService.updateVendorProfile(id, dto);
   }
 
@@ -69,11 +73,11 @@ export class VendorsController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
-@Get(':id/documents')
-getVendorDocuments(@Param('id') vendorId: string) {
-  return this.vendorsService.getVendorDocuments(vendorId);
-}
+  @Roles('ADMIN')
+  @Get(':id/documents')
+  getVendorDocuments(@Param('id') vendorId: string) {
+    return this.vendorsService.getVendorDocuments(vendorId);
+  }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -85,10 +89,15 @@ getVendorDocuments(@Param('id') vendorId: string) {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post('documents/:id/reject')
-  reject(
-    @Param('id') id: string,
-    @Body() dto: ApproveRejectVendorDto,
-  ) {
+  reject(@Param('id') id: string, @Body() dto: ApproveRejectVendorDto) {
     return this.vendorsService.rejectDocument(id, dto.comment);
+  }
+
+  // Add to src/vendors/vendors.controller.ts
+
+  @Get('search')
+  @UseGuards(JwtAuthGuard)
+  async searchMarket(@Query('q') q: string) {
+    return this.vendorsService.searchMarketplace(q);
   }
 }
