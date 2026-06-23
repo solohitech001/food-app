@@ -1,26 +1,34 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsArray,
-  ValidateNested,
-  IsUUID,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-import { OrderItemDto } from './create-order-item.dto';
+
+export class OrderItemDto {
+  @ApiProperty({ 
+    type: String,
+    description: 'The unique database ID of the food item being ordered', 
+    example: 'food_clx987xyz123' 
+  })
+  foodId: string;
+
+  @ApiProperty({ 
+    type: Number,
+    description: 'The total units ordered for this item', 
+    example: 2 
+  })
+  quantity: number;
+}
 
 export class CreateOrderWithItemsDto {
-  @ApiProperty({
-    description: 'Vendor ID where the order is being placed',
-    example: 'b7c9f6b1-3a4e-4b8e-9c1d-123456789abc',
+  @ApiProperty({ 
+    type: String,
+    description: 'The unique ID of the target store/vendor', 
+    example: 'vendor_789' 
   })
-  @IsUUID()
   vendorId: string;
 
-  @ApiProperty({
-    description: 'List of items in the order',
-    type: [OrderItemDto],
+  @ApiProperty({ 
+    type: () => [OrderItemDto], // 👈 Crucial:  The arrow function forces Swagger to read the class configuration inline
+    description: 'List of items included in the checkout order',
   })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OrderItemDto)
   items: OrderItemDto[];
 }
+
+export class EmptyOrderActionDto {}

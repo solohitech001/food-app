@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { ApiConsumes, ApiBody, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { FoodsService } from './foods.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,6 +22,11 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/role.guard';
 import { ObjectStorageService } from 'src/uploads/object-storage';
 
+// Import DTOs
+import { CreateFoodDto, UpdateFoodDto, EmptyActionDto } from './dto/create-food.dto';
+import { FoodFeedDto } from './dto/food-feed.dto';
+
+@ApiTags('foods')
 @Controller('foods')
 export class FoodsController {
   constructor(
@@ -28,40 +34,45 @@ export class FoodsController {
     private readonly storageService: ObjectStorageService,
   ) {}
 
-  /* =======================
+  /* ==========================================================================
      🌍 PUBLIC ROUTES
-  ======================= */
+     ========================================================================== */
 
   @Get()
+  @ApiOperation({ summary: 'Get all foods available' })
   getAllFoods() {
     return this.foodsService.getAllFoods();
   }
 
   @Get('feed')
+  @ApiOperation({ summary: 'Get location-filtered food feed for users' })
+  @ApiResponse({ type: [FoodFeedDto] })
   getFoodFeed(@Req() req: any) {
     return this.foodsService.getFoodFeed(req.user?.id);
   }
 
-  /* =======================
+  /* ==========================================================================
      👤 VENDOR ROUTES
-  ======================= */
+     ========================================================================== */
 
-  // Must be **before** the dynamic :id route
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Get('vendor')
+  @ApiOperation({ summary: 'Get all foods belonging to the authenticated vendor' })
   getVendorFoods(@Req() req: any) {
-    console.log('Getting foods for vendor userId:', req.user.id); // Debug
+    console.log('Getting foods for vendor userId:', req.user.id);
     return this.foodsService.getVendorFoods(req.user.id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Put(':id')
+  @ApiOperation({ summary: 'Update an existing food item' })
+  @ApiBody({ type: UpdateFoodDto, description: 'Payload structural keys for updating items' })
   updateFood(
     @Param('id') id: string,
     @Req() req: any,
-    @Body() body: any,
+    @Body() body: UpdateFoodDto,
   ) {
     console.log('Updating food with id:', id, 'for user:', req.user.id);
     return this.foodsService.updateFood(id, req.user.id, body);
@@ -70,17 +81,21 @@ export class FoodsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a food item' })
   deleteFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.deleteFood(id, req.user.id);
   }
 
-  /* =======================
+  /* ==========================================================================
      🏪 VENDOR + ADMIN ROUTES
-  ======================= */
+     ========================================================================== */
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR', 'ADMIN')
   @Post()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: CreateFoodDto })
+  @ApiOperation({ summary: 'Create a new food item with image and optional video' })
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -94,7 +109,7 @@ export class FoodsController {
     @Req() req: any,
     @UploadedFiles()
     files: { image?: Express.Multer.File[]; media?: Express.Multer.File[] },
-    @Body() body: any,
+    @Body() body: CreateFoodDto,
   ) {
     if (!files.image || files.image.length === 0) {
       throw new BadRequestException('Food image is required');
@@ -141,33 +156,40 @@ export class FoodsController {
     });
   }
 
-  /* =======================
+  /* ==========================================================================
      ❤️ LIKE / SAVE / SHARE
-  ======================= */
+     ========================================================================== */
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/like')
+  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiOperation({ summary: 'Toggle like state on a food item' })
   likeFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.toggleLike(id, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/save')
+  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiOperation({ summary: 'Toggle save state on a food item' })
   saveFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.toggleSave(id, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/share')
+  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiOperation({ summary: 'Log a share action for a food item' })
   shareFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.shareFood(id, req.user.id);
   }
 
-  /* =======================
+  /* ==========================================================================
      🌍 PUBLIC DYNAMIC ROUTE
-  ======================= */
+     ========================================================================== */
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get details of a single food item by ID' })
   getFoodById(@Param('id') id: string) {
     return this.foodsService.getFoodById(id);
   }

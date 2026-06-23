@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client/wasm';
-import { CreateOrderWithItemsDto } from './dto/create-order-with-items.dto'; // ✅ FIXED
+import { CreateOrderWithItemsDto } from './dto/create-order-with-items.dto';  // ✅ FIXED
 
 @Injectable()
 export class OrdersService {
