@@ -41,8 +41,8 @@ export class WalletService {
     return this.prisma.wallet.create({
       data: {
         userId,
-        accountNumber: flwAccount.account_number,
-        bankName: flwAccount.bank_name,
+        virtualAccountNumber: flwAccount.account_number,
+        virtualBankName: flwAccount.bank_name,
         flutterwaveRef: reference,
         balance: 0,
       },
@@ -78,8 +78,8 @@ export class WalletService {
     return this.prisma.wallet.create({
       data: {
         vendorId,
-        accountNumber: flwAccount.account_number,
-        bankName: flwAccount.bank_name,
+        virtualAccountNumber: flwAccount.account_number,
+        virtualBankName: flwAccount.bank_name,
         flutterwaveRef: reference,
         balance: 0,
       },
@@ -301,7 +301,7 @@ export class WalletService {
     if (exists) return { duplicate: true };
 
     const wallet = await this.prisma.wallet.findUnique({
-      where: { accountNumber },
+      where: { virtualAccountNumber: accountNumber },
     });
 
     if (!wallet) {
@@ -342,8 +342,8 @@ export class WalletService {
 
   async create(data: {
     userId: string;
-    accountNumber: string;
-    bankName: string;
+    virtualAccountNumber: string;
+    virtualBankName: string;
     flutterwaveRef: string;
   }) {
     return this.prisma.wallet.create({
@@ -360,7 +360,7 @@ export class WalletService {
     reference: string,
   ) {
     const wallet = await this.prisma.wallet.findUnique({
-      where: { accountNumber },
+      where: { virtualAccountNumber : accountNumber },
     });
 
     if (!wallet) {

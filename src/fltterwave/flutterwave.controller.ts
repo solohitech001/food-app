@@ -54,8 +54,8 @@ export class FlutterwaveController {
     // 💾 Persist wallet
     return this.walletService.create({
       userId: user.id,
-      accountNumber: account.account_number,
-      bankName: account.bank_name,
+      virtualAccountNumber: account.account_number,
+      virtualBankName: account.bank_name,
       flutterwaveRef: reference,
     });
   }

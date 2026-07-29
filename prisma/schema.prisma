@@ -37,6 +37,8 @@ enum LocationLockType {
 enum OrderStatus {
   PENDING
   PREPARING
+  READY
+  OUT_FOR_DELIVERY
   DELIVERED
   COMPLETED
   CANCELLED
@@ -103,7 +105,8 @@ model User {
   otpExpiresAt  DateTime?
   lastOtpSentAt DateTime?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
 
   vendor  Vendor?
   wallet  Wallet?
@@ -126,16 +129,45 @@ model Vendor {
   name   String
   userId String @unique
 
-  status VendorStatus @default(PENDING)
+  status        VendorStatus         @default(PENDING)
+  notifications VendorNotification[]
 
+  // Existing
   latitude  Float?
   longitude Float?
   city      String?
   state     String?
 
+  // NEW
+  address     String?
+  description String?
+
+  logo       String?
+  coverPhoto String?
+
+  email       String?
+  phoneNumber String?
+
+  website String?
+
+  instagram String?
+  facebook  String?
+  twitter   String?
+  tiktok    String?
+
+  openingTime String?
+  closingTime String?
+
+  averageRating Float @default(0)
+
   deliveryRadiusKm Float            @default(10)
   locationLockType LocationLockType @default(RADIUS)
   level            VendorLevel      @default(LEVEL_1)
+
+  accountNumber String?
+  accountName   String?
+  bankName      String?
+  bankCode      String?
 
   user            User             @relation(fields: [userId], references: [id])
   wallet          Wallet?
@@ -143,14 +175,32 @@ model Vendor {
   deliveryZones   VendorZone[]
   vendorDocuments VendorDocument[]
   orders          Order[]
+  reviews         Review[]
+  badges          VendorBadge[]
 
-  accountNumber String?
-  bankCode      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
 
-  reviews Review[]
-  badges  VendorBadge[]
+  @@index([status])
+  @@index([city])
+  @@index([state])
+  @@index([level])
+}
+
+model VendorNotification {
+  id       String @id @default(uuid())
+  vendorId String
+
+  title   String
+  message String
+
+  isRead Boolean @default(false)
 
   createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
 }
 
 /**
@@ -166,6 +216,8 @@ model VendorZone {
   polygon  Json
 
   vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
 }
 
 /**
@@ -186,6 +238,9 @@ model VendorDocument {
   createdAt DateTime @default(now())
 
   vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@index([status])
 }
 
 /**
@@ -194,25 +249,73 @@ model VendorDocument {
  * =====================
  */
 
+model MealCategory {
+  id        String  @id @default(uuid())
+  name      String  @unique
+  image     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  subTypes MealSubCategory[]
+  foods    Food[]
+
+  @@index([name])
+  @@index([sortOrder])
+}
+
+model MealSubCategory {
+  id   String @id @default(uuid())
+  name String
+
+  categoryId String
+  category   MealCategory @relation(fields: [categoryId], references: [id])
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  foods Food[]
+
+  @@unique([name, categoryId])
+  @@index([categoryId])
+  @@index([sortOrder])
+}
+
 model Food {
-  id          String  @id @default(uuid())
+  id          String @id @default(uuid())
+  vendorId    String
+
   name        String
   description String?
   price       Float
 
+  categoryId  String
+  subTypeId   String?
+
+  category MealCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subType  MealSubCategory? @relation(fields: [subTypeId], references: [id], onDelete: SetNull)
+
   imageUrl String?
   mediaUrl String?
 
-  vendorId String
-  vendor   Vendor @relation(fields: [vendorId], references: [id])
-
-  likes  FoodLike[]
-  saves  FoodSave[]
-  shares FoodShare[]
-
-  orderItems OrderItem[]
+  isAvailable Boolean @default(true)
+  stock       Int?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  orderItems OrderItem[]
+  likes      FoodLike[]
+  saves      FoodSave[]
+  shares     FoodShare[]
+
+  @@index([vendorId])
+  @@index([categoryId])
+  @@index([subTypeId])
 }
 
 /**
@@ -267,18 +370,21 @@ model Wallet {
   userId   String? @unique
   vendorId String? @unique
 
-  balance Float  @default(0)
+  balance  Float  @default(0)
   currency String @default("NGN")
   version  Int    @default(0)
 
-  accountNumber  String @unique
-  bankName       String
-  flutterwaveRef String
+  // Virtual Account Details
+  virtualAccountNumber String @unique
+  virtualBankName      String
+  flutterwaveRef       String
 
   withdrawalsThisMonth Int @default(0)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  // Relations
   user   User?   @relation(fields: [userId], references: [id])
   vendor Vendor? @relation(fields: [vendorId], references: [id])
 
@@ -296,7 +402,7 @@ model Wallet {
  */
 
 model Transaction {
-  id       String @id @default(uuid())
+  id       String  @id @default(uuid())
   walletId String
   userId   String?
 
@@ -311,8 +417,11 @@ model Transaction {
   balanceAfter Float?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
 }
 
 /**
@@ -322,15 +431,18 @@ model Transaction {
  */
 
 model Withdrawal {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   walletId  String
   amount    Float
   status    String
-  reference String   @unique
+  reference String @unique
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
 }
 
 /**
@@ -361,26 +473,30 @@ model OrderItem {
  */
 
 model Order {
-  id          String      @id @default(uuid())
-  userId      String
-  vendorId    String
-  amount      Float
-  status      OrderStatus @default(PENDING)
+  id       String      @id @default(uuid())
+  userId   String
+  vendorId String
+  amount   Float
+  status   OrderStatus @default(PENDING)
 
   paymentStatus String @default("PENDING")
 
   acceptBy    DateTime
-  reference   String      @unique
+  reference   String    @unique
   deliveredAt DateTime?
   completedAt DateTime?
-  createdAt   DateTime    @default(now())
+  createdAt   DateTime  @default(now())
 
   user   User   @relation(fields: [userId], references: [id])
   vendor Vendor @relation(fields: [vendorId], references: [id])
 
-  items OrderItem[]
+  items  OrderItem[]
   escrow Escrow?
   review Review?
+
+  @@index([vendorId])
+  @@index([userId])
+  @@index([status])
 }
 
 /**
@@ -395,12 +511,10 @@ model Escrow {
   walletId       String
   vendorWalletId String
 
-  
-
-  amount Float
-  status EscrowStatus @default(HELD)
-  reference       String   @unique  
-  createdAt  DateTime  @default(now())
+  amount     Float
+  status     EscrowStatus @default(HELD)
+  reference  String       @unique
+  createdAt  DateTime     @default(now())
   releasedAt DateTime?
   refundedAt DateTime?
 
@@ -429,6 +543,9 @@ model Review {
   order  Order  @relation(fields: [orderId], references: [id])
   vendor Vendor @relation(fields: [vendorId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
+
+  @@index([vendorId])
+  @@index([userId])
 }
 
 /**
@@ -454,10 +571,10 @@ model VendorBadge {
  */
 
 model WebhookEvent {
-  id        String   @id @default(uuid())
-  reference String   @unique
+  id        String @id @default(uuid())
+  reference String @unique
   source    String
-  status    String   @default("PROCESSED")
+  status    String @default("PROCESSED")
   payload   Json?
 
   createdAt DateTime @default(now())

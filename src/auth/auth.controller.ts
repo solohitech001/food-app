@@ -38,7 +38,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth() // 🔑 Swagger knows this route requires a JWT Bearer token
   @ApiOperation({ summary: 'Update user location (requires Bearer token)' })
-  @ApiResponse({ status: 200, description: 'Location  updated successfully' })
+  @ApiResponse({ status: 200, description: 'Location updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid token' })
   updateLocation(@Req() req, @Body() updateLocationDto: UpdateLocationDto) {
     const { latitude, longitude, city, state } = updateLocationDto;

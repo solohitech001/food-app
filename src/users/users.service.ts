@@ -45,8 +45,8 @@ async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
     // ✅ WALLET (ACCOUNT NUMBER)
     wallet: user.wallet
   ? {
-      accountNumber: user.wallet.accountNumber,
-      bankName: user.wallet.bankName,
+      accountNumber: user.wallet.virtualAccountNumber,
+      bankName: user.wallet.virtualBankName,
       balance: user.wallet.balance, // ✅ ADD THIS
     }
   : null,

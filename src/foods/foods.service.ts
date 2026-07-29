@@ -7,10 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { FoodFeedDto } from './dto/food-feed.dto';
 
-const PRICE_LIMITS: Record<'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3', number> = {
+const PRICE_LIMITS: Record<
+  'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3' | 'LEVEL_4',
+  number
+> = {
   LEVEL_1: 5000,
   LEVEL_2: 15000,
   LEVEL_3: 50000,
+  LEVEL_4: 100000,
 };
 
 @Injectable()
@@ -67,33 +71,37 @@ export class FoodsService {
       );
     }
 
+    const payload = {
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      categoryId: data.categoryId,
+      subTypeId: data.subTypeId,
+      imageUrl: data.imageUrl,
+      mediaUrl: data.mediaUrl,
+      vendorId: vendor.id,
+    };
+
     return this.prisma.food.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        price: data.price,
-        imageUrl: data.imageUrl,
-        mediaUrl: data.mediaUrl,
-        vendorId: vendor.id,
-      },
+      data: payload,
     });
   }
 
   /* ===============================
      GET VENDOR FOODS
   =============================== */
- async getVendorFoods(userId: string) {
-  console.log('Getting foods for userId:', userId); // Debug log
-  const vendor = await this.getVendorByUser(userId);
-  console.log('Vendor found:', vendor);
+  async getVendorFoods(userId: string) {
+    console.log('Getting foods for userId:', userId); // Debug log
+    const vendor = await this.getVendorByUser(userId);
+    console.log('Vendor found:', vendor);
 
-  const foods = await this.prisma.food.findMany({
-    where: { vendorId: vendor.id },
-  });
-  console.log('Foods found:', foods);
+    const foods = await this.prisma.food.findMany({
+      where: { vendorId: vendor.id },
+    });
+    console.log('Foods found:', foods);
 
-  return foods;
-}
+    return foods;
+  }
   /* ===============================
      UPDATE FOOD
   =============================== */
@@ -249,9 +257,7 @@ export class FoodsService {
         vendor: {
           id: food.vendor.id,
           name: food.vendor.name,
-          handle: `@${food.vendor.name
-            .toLowerCase()
-            .replace(/\s+/g, '')}`,
+          handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
         },
         stats: {
           likes: food.likes.length,

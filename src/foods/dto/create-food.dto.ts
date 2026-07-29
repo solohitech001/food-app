@@ -1,33 +1,105 @@
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateFoodDto {
-  @ApiProperty({ description: 'The name of the food item', example: 'Jollof Rice' })
+  @ApiProperty({
+    description: 'The name of the food item',
+    example: 'Jollof Rice',
+  })
+  @IsString()
   name: string;
 
-  @ApiProperty({ description: 'The price of the food item', example: '3500' })
-  price: string; 
+  @ApiProperty({
+    description: 'Price of the food item in Naira',
+    example: 3500,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  price: number;
 
-  @ApiProperty({ description: 'Optional food description', example: 'Spicy Nigerian Jollof', required: false })
+  @ApiPropertyOptional({
+    description: 'Optional food description',
+    example: 'Spicy Nigerian Jollof Rice served with grilled chicken.',
+  })
+  @IsOptional()
+  @IsString()
   description?: string;
 
-  @ApiProperty({ type: 'string', format: 'binary', description: 'Main food image file' })
+  @ApiProperty({
+    description: 'Meal Category ID',
+    example: 'd6cb5fd2-fd58-45b4-baf9-4d6b1c5b3d9a',
+  })
+  @IsUUID()
+  categoryId: string;
+
+  @ApiPropertyOptional({
+    description: 'Meal Sub Category ID',
+    example: '8dc4f0d6-7d35-4d0d-8dc5-6d94f8e3b4e1',
+  })
+  @IsOptional()
+  @IsUUID()
+  subTypeId?: string;
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'Main food image',
+  })
   image: any;
 
-  @ApiProperty({ type: 'string', format: 'binary', description: 'Optional food media/video file', required: false })
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Optional food video/media',
+  })
   media?: any;
 }
 
 export class UpdateFoodDto {
-  @ApiProperty({ example: 'Suya-Spiced Jollof Rice', required: false })
+  @ApiPropertyOptional({
+    example: 'Suya-Spiced Jollof Rice',
+  })
+  @IsOptional()
+  @IsString()
   name?: string;
 
-  @ApiProperty({ example: 'Updated spicy description', required: false })
+  @ApiPropertyOptional({
+    example: 'Updated spicy Nigerian Jollof Rice.',
+  })
+  @IsOptional()
+  @IsString()
   description?: string;
 
-  @ApiProperty({ example: 4000, description: 'Updated price in Naira', required: false })
+  @ApiPropertyOptional({
+    example: 4000,
+    description: 'Updated price in Naira',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
   price?: number;
+
+  @ApiPropertyOptional({
+    description: 'Updated Meal Category ID',
+    example: 'd6cb5fd2-fd58-45b4-baf9-4d6b1c5b3d9a',
+  })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Updated Meal Sub Category ID',
+    example: '8dc4f0d6-7d35-4d0d-8dc5-6d94f8e3b4e1',
+  })
+  @IsOptional()
+  @IsUUID()
+  subTypeId?: string;
 }
 
-export class EmptyActionDto {
-  // Empty class with description forces Swagger to present an editable JSON block '{}'
-}
+export class EmptyActionDto {}
