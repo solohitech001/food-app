@@ -56,11 +56,37 @@ export class FoodsService {
   /* ===============================
      CREATE FOOD
   =============================== */
+
   async createFood(userId: string, data: any) {
     const vendor = await this.getVendorByUser(userId);
 
     if (vendor.status !== 'ACTIVE') {
       throw new ForbiddenException('Vendor not approved yet');
+    }
+
+    // Validate  category
+    const category = await this.prisma.mealCategory.findUnique({
+      where: { id: data.categoryId },
+    });
+
+    if (!category) {
+      throw new BadRequestException('Invalid category');
+    }
+
+    // Validate subcategory (if provided)
+    if (data.subTypeId) {
+      const subType = await this.prisma.mealSubCategory.findFirst({
+        where: {
+          id: data.subTypeId,
+          categoryId: data.categoryId,
+        },
+      });
+
+      if (!subType) {
+        throw new BadRequestException(
+          'Selected subcategory does not belong to the selected category',
+        );
+      }
     }
 
     const maxPrice = PRICE_LIMITS[vendor.level];
@@ -273,5 +299,79 @@ export class FoodsService {
     }
 
     return filteredFoods;
+  }
+
+  /* ===============================
+   CREATE CATEGORY
+================================ */
+  async createCategory(data: {
+    name: string;
+    image?: string;
+    sortOrder?: number;
+  }) {
+    const existing = await this.prisma.mealCategory.findUnique({
+      where: { name: data.name.trim() },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Category already exists');
+    }
+
+    return this.prisma.mealCategory.create({
+      data: {
+        name: data.name.trim(),
+        image: data.image,
+        sortOrder: data.sortOrder ?? 0,
+      },
+    });
+  }
+
+  /* ===============================
+   GET ALL CATEGORIES
+================================ */
+  async getCategories() {
+    return this.prisma.mealCategory.findMany({
+      orderBy: {
+        sortOrder: 'asc',
+      },
+    });
+  }
+
+  /* ===============================
+   GET CATEGORY
+================================ */
+  async getCategoryById(id: string) {
+    return this.prisma.mealCategory.findUnique({
+      where: { id },
+      include: {
+        subTypes: true,
+      },
+    });
+  }
+
+  /* ===============================
+   UPDATE CATEGORY
+================================ */
+  async updateCategory(
+    id: string,
+    data: {
+      name?: string;
+      image?: string;
+      sortOrder?: number;
+    },
+  ) {
+    return this.prisma.mealCategory.update({
+      where: { id },
+      data,
+    });
+  }
+
+  /* ===============================
+   DELETE CATEGORY
+================================ */
+  async deleteCategory(id: string) {
+    return this.prisma.mealCategory.delete({
+      where: { id },
+    });
   }
 }

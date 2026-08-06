@@ -14,7 +14,13 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { ApiConsumes, ApiBody, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiConsumes,
+  ApiBody,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 import { FoodsService } from './foods.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -23,8 +29,13 @@ import { RolesGuard } from '../auth/role.guard';
 import { ObjectStorageService } from 'src/uploads/object-storage';
 
 // Import DTOs
-import { CreateFoodDto, UpdateFoodDto, EmptyActionDto } from './dto/create-food.dto';
+import {
+  CreateFoodDto,
+  UpdateFoodDto,
+  EmptyActionDto,
+} from './dto/create-food.dto';
 import { FoodFeedDto } from './dto/food-feed.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
 
 @ApiTags('foods')
 @Controller('foods')
@@ -52,13 +63,55 @@ export class FoodsController {
   }
 
   /* ==========================================================================
+   🍽️ CATEGORY ROUTES
+   ========================================================================== */
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Get all meal categories' })
+  getCategories() {
+    return this.foodsService.getCategories();
+  }
+
+  @Get('categories/:id')
+  @ApiOperation({ summary: 'Get a category with its subcategories' })
+  getCategory(@Param('id') id: string) {
+    return this.foodsService.getCategoryById(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post('categories')
+  @ApiOperation({ summary: 'Create a new meal category' })
+  createCategory(@Body() body: CreateCategoryDto) {
+    return this.foodsService.createCategory(body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Put('categories/:id')
+  @ApiOperation({ summary: 'Update a meal category' })
+  updateCategory(@Param('id') id: string, @Body() body: CreateCategoryDto) {
+    return this.foodsService.updateCategory(id, body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Delete('categories/:id')
+  @ApiOperation({ summary: 'Delete a meal category' })
+  deleteCategory(@Param('id') id: string) {
+    return this.foodsService.deleteCategory(id);
+  }
+
+  /* ==========================================================================
      👤 VENDOR ROUTES
      ========================================================================== */
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDOR')
   @Get('vendor')
-  @ApiOperation({ summary: 'Get all foods belonging to the authenticated vendor' })
+  @ApiOperation({
+    summary: 'Get all foods belonging to the authenticated vendor',
+  })
   getVendorFoods(@Req() req: any) {
     console.log('Getting foods for vendor userId:', req.user.id);
     return this.foodsService.getVendorFoods(req.user.id);
@@ -68,7 +121,10 @@ export class FoodsController {
   @Roles('VENDOR')
   @Put(':id')
   @ApiOperation({ summary: 'Update an existing food item' })
-  @ApiBody({ type: UpdateFoodDto, description: 'Payload structural keys for updating items' })
+  @ApiBody({
+    type: UpdateFoodDto,
+    description: 'Payload structural keys for updating items',
+  })
   updateFood(
     @Param('id') id: string,
     @Req() req: any,
@@ -95,7 +151,9 @@ export class FoodsController {
   @Post()
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateFoodDto })
-  @ApiOperation({ summary: 'Create a new food item with image and optional video' })
+  @ApiOperation({
+    summary: 'Create a new food item with image and optional video',
+  })
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -144,13 +202,18 @@ export class FoodsController {
         throw new BadRequestException('Video too large (max 50MB)');
       }
 
-      mediaUrl = await this.storageService.uploadFile(videoFile, 'foods/videos/');
+      mediaUrl = await this.storageService.uploadFile(
+        videoFile,
+        'foods/videos/',
+      );
     }
 
     return this.foodsService.createFood(userId, {
       name: body.name,
       description: body.description,
       price: Number(body.price),
+      categoryId: body.categoryId,
+      subTypeId: body.subTypeId,
       imageUrl,
       mediaUrl,
     });
@@ -162,7 +225,10 @@ export class FoodsController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/like')
-  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiBody({
+    type: EmptyActionDto,
+    description: 'Submit an empty object body: {}',
+  })
   @ApiOperation({ summary: 'Toggle like state on a food item' })
   likeFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.toggleLike(id, req.user.id);
@@ -170,7 +236,10 @@ export class FoodsController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/save')
-  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiBody({
+    type: EmptyActionDto,
+    description: 'Submit an empty object body: {}',
+  })
   @ApiOperation({ summary: 'Toggle save state on a food item' })
   saveFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.toggleSave(id, req.user.id);
@@ -178,7 +247,10 @@ export class FoodsController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/share')
-  @ApiBody({ type: EmptyActionDto, description: 'Submit an empty object body: {}' })
+  @ApiBody({
+    type: EmptyActionDto,
+    description: 'Submit an empty object body: {}',
+  })
   @ApiOperation({ summary: 'Log a share action for a food item' })
   shareFood(@Param('id') id: string, @Req() req: any) {
     return this.foodsService.shareFood(id, req.user.id);
