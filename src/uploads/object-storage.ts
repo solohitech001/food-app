@@ -1,27 +1,33 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { S3Client, PutObjectCommand, ObjectCannedACL } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  ObjectCannedACL,
+} from '@aws-sdk/client-s3';
 import { extname } from 'path';
 
 @Injectable()
 export class ObjectStorageService {
   private s3Client: S3Client;
-  private readonly bucketName = 'magikworldgifts';
-  private readonly region = 'eu-central-1';
-
+  private readonly bucketName = 'solohitechbucket';
+  private readonly region = 'fr-par-1';
 
   constructor() {
     this.s3Client = new S3Client({
       region: this.region,
       endpoint: `https://${this.region}.linodeobjects.com`,
       credentials: {
-        accessKeyId: 'BO2MFYSYNZCFUV9U8LTN',
-        secretAccessKey: "jaYJNU1qJIV1mIHnjHqmYOY5BfiECurRAiJo0nwV",
+        accessKeyId: 'T9F4JE76IDQM0B793ECP',
+        secretAccessKey: 'qhlqYmcSrmGp2C4Qv2gIG1jfdPeDc13ypzUpno4t',
       },
       forcePathStyle: true,
     });
   }
 
-  async uploadFile(file: Express.Multer.File, folder = 'foods/'): Promise<string> {
+  async uploadFile(
+    file: Express.Multer.File,
+    folder = 'foods/',
+  ): Promise<string> {
     const fileName =
       Date.now() +
       '-' +

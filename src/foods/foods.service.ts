@@ -64,7 +64,7 @@ export class FoodsService {
       throw new ForbiddenException('Vendor not approved yet');
     }
 
-    // Validate  category
+    // Validate   category
     const category = await this.prisma.mealCategory.findUnique({
       where: { id: data.categoryId },
     });
