@@ -45,20 +45,6 @@ export class CreateFoodDto {
   @IsOptional()
   @IsUUID()
   subTypeId?: string;
-
-  @ApiProperty({
-    type: 'string',
-    format: 'binary',
-    description: 'Main food image',
-  })
-  image: any;
-
-  @ApiPropertyOptional({
-    type: 'string',
-    format: 'binary',
-    description: 'Optional food video/media',
-  })
-  media?: any;
 }
 
 export class UpdateFoodDto {
