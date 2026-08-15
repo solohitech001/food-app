@@ -13,6 +13,7 @@ import {
   UploadedFiles,
   BadRequestException,
 } from '@nestjs/common';
+
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import {
@@ -21,7 +22,9 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
+import { FoodFeedPaginationDto } from './dto/food-feed-pagination.dto';
 
 import { FoodsService } from './foods.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -47,7 +50,7 @@ export class FoodsController {
   ) {}
 
   /* ==========================================================================
-     🌍 PUBLIC  ROUTES
+     🌍 PUBLIC   ROUTES
      ========================================================================== */
 
   @Get()
@@ -57,8 +60,37 @@ export class FoodsController {
   }
 
   @Get('feed')
-  @ApiOperation({ summary: 'Get paginated location-filtered food feed' })
-  @ApiResponse({ type: [FoodFeedDto] })
+  @ApiOperation({
+    summary: 'Get paginated location-filtered food feed',
+    description:
+      'Returns a location-filtered food feed using pagination. The default page size is 10 foods. Use page and limit for infinite scrolling.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    minimum: 1,
+    description: 'Page number. Starts from 1.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    minimum: 1,
+    maximum: 50,
+    description: 'Number of foods to return. Defaults to 10. Maximum is 50.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated food feed returned successfully',
+    type: FoodFeedPaginationDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid pagination parameters',
+  })
   getFoodFeed(
     @Req() req: any,
     @Query('page') page = '1',

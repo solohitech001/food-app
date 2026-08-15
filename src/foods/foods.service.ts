@@ -250,96 +250,174 @@ export class FoodsService {
   /* ===============================
      LOCATION LOCKED FOOD FEED
   =============================== */
-  async getFoodFeed(
-  userId?: string,
-  page = 1,
-  limit = 10,
-) {
-  page = Math.max(1, Number(page) || 1);
-  limit = Math.min(50, Math.max(1, Number(limit) || 10));
+  async getFoodFeed(userId?: string, page = 1, limit = 10) {
+    // ===============================
+    // PAGINATION VALIDATION
+    // ===============================
 
-  const skip = (page - 1) * limit;
+    page = Number(page) || 1;
+    limit = Number(limit) || 10;
 
-  const foods = await this.prisma.food.findMany({
-    include: {
-      vendor: true,
-      likes: true,
-      saves: true,
-      shares: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    skip,
-    take: limit,
-  });
+    if (page < 1) {
+      page = 1;
+    }
 
-  if (!userId) {
+    if (limit < 1) {
+      limit = 10;
+    }
+
+    // Prevent clients from requesting huge payloads
+    if (limit > 50) {
+      limit = 50;
+    }
+
+    const skip = (page - 1) * limit;
+
+    // ===============================
+    // GET FOODS
+    // ===============================
+
+    const foods = await this.prisma.food.findMany({
+      include: {
+        vendor: true,
+
+        // IMPORTANT:
+        // Only return counts.
+        // Do NOT return all likes/saves/shares.
+        _count: {
+          select: {
+            likes: true,
+            saves: true,
+            shares: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: 'desc',
+      },
+
+      skip,
+      take: limit,
+    });
+
+    // ===============================
+    // GET USER ACTIONS
+    // ===============================
+
+    let likedFoodIds = new Set<string>();
+    let savedFoodIds = new Set<string>();
+
+    if (userId && foods.length > 0) {
+      const foodIds = foods.map((food) => food.id);
+
+      const [userLikes, userSaves] = await Promise.all([
+        this.prisma.foodLike.findMany({
+          where: {
+            userId,
+            foodId: {
+              in: foodIds,
+            },
+          },
+          select: {
+            foodId: true,
+          },
+        }),
+
+        this.prisma.foodSave.findMany({
+          where: {
+            userId,
+            foodId: {
+              in: foodIds,
+            },
+          },
+          select: {
+            foodId: true,
+          },
+        }),
+      ]);
+
+      likedFoodIds = new Set(userLikes.map((like) => like.foodId));
+
+      savedFoodIds = new Set(userSaves.map((save) => save.foodId));
+    }
+
+    // ===============================
+    // LOCATION FILTER
+    // ===============================
+
+    const filteredFoods: FoodFeedDto[] = [];
+
+    for (const food of foods) {
+      // If user is authenticated, check location
+      if (userId) {
+        const canOrder = await this.locationService.canUserOrder(
+          userId,
+          food.vendorId,
+        );
+
+        if (!canOrder) {
+          continue;
+        }
+      }
+
+      filteredFoods.push({
+        id: food.id,
+
+        title: food.name,
+
+        description: food.description,
+
+        image: food.imageUrl,
+
+        video: food.mediaUrl,
+
+        price: food.price,
+
+        // vendor: {
+
+        //   id: food.vendor.id,
+        //   name: food.vendor.name,
+        //   handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
+
+        // }
+        // ,
+
+        stats: {
+          // ONLY COUNTS
+          likes: food._count.likes,
+          saves: food._count.saves,
+          shares: food._count.shares,
+        },
+
+        actions: {
+          liked: userId ? likedFoodIds.has(food.id) : false,
+
+          saved: userId ? savedFoodIds.has(food.id) : false,
+
+          canShare: true,
+        },
+      });
+    }
+
+    // ===============================
+    // PAGINATION RESPONSE
+    // ===============================
+
     return {
-      data: foods,
+      data: filteredFoods,
+
       pagination: {
         page,
+
         limit,
+
         hasNextPage: foods.length === limit,
+
         nextPage: foods.length === limit ? page + 1 : null,
       },
     };
   }
-
-  const filteredFoods: FoodFeedDto[] = [];
-
-  for (const food of foods) {
-    const canOrder = await this.locationService.canUserOrder(
-      userId,
-      food.vendorId,
-    );
-
-    if (!canOrder) continue;
-
-    filteredFoods.push({
-      id: food.id,
-      title: food.name,
-      description: food.description,
-      image: food.imageUrl,
-      video: food.mediaUrl,
-      price: food.price,
-
-      vendor: {
-        id: food.vendor.id,
-        name: food.vendor.name,
-        handle: `@${food.vendor.name
-          .toLowerCase()
-          .replace(/\s+/g, '')}`,
-      },
-
-      stats: {
-        likes: food.likes.length,
-        saves: food.saves.length,
-        shares: food.shares.length,
-      },
-
-      actions: {
-        liked: food.likes.some(
-          (like) => like.userId === userId,
-        ),
-        saved: food.saves.some(
-          (save) => save.userId === userId,
-        ),
-        canShare: true,
-      },
-    });
-  }
-
-  return {
-    data: filteredFoods,
-    pagination: {
-      page,
-      limit,
-      hasNextPage: foods.length === limit,
-      nextPage: foods.length === limit ? page + 1 : null,
-    },
-  };
-}
 
   /* ===============================
    CREATE CATEGORY
