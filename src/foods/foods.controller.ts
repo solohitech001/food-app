@@ -7,6 +7,7 @@ import {
   Delete,
   Param,
   Req,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
@@ -46,7 +47,7 @@ export class FoodsController {
   ) {}
 
   /* ==========================================================================
-     🌍 PUBLIC ROUTES
+     🌍 PUBLIC  ROUTES
      ========================================================================== */
 
   @Get()
@@ -56,10 +57,18 @@ export class FoodsController {
   }
 
   @Get('feed')
-  @ApiOperation({ summary: 'Get location-filtered food feed for users' })
+  @ApiOperation({ summary: 'Get paginated location-filtered food feed' })
   @ApiResponse({ type: [FoodFeedDto] })
-  getFoodFeed(@Req() req: any) {
-    return this.foodsService.getFoodFeed(req.user?.id);
+  getFoodFeed(
+    @Req() req: any,
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+  ) {
+    return this.foodsService.getFoodFeed(
+      req.user?.id,
+      Number(page),
+      Number(limit),
+    );
   }
 
   /* ==========================================================================

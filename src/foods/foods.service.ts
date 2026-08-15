@@ -250,56 +250,96 @@ export class FoodsService {
   /* ===============================
      LOCATION LOCKED FOOD FEED
   =============================== */
-  async getFoodFeed(userId?: string) {
-    const foods = await this.prisma.food.findMany({
-      include: {
-        vendor: true,
-        likes: true,
-        saves: true,
-        shares: true,
+  async getFoodFeed(
+  userId?: string,
+  page = 1,
+  limit = 10,
+) {
+  page = Math.max(1, Number(page) || 1);
+  limit = Math.min(50, Math.max(1, Number(limit) || 10));
+
+  const skip = (page - 1) * limit;
+
+  const foods = await this.prisma.food.findMany({
+    include: {
+      vendor: true,
+      likes: true,
+      saves: true,
+      shares: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    skip,
+    take: limit,
+  });
+
+  if (!userId) {
+    return {
+      data: foods,
+      pagination: {
+        page,
+        limit,
+        hasNextPage: foods.length === limit,
+        nextPage: foods.length === limit ? page + 1 : null,
       },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!userId) return foods;
-
-    const filteredFoods: FoodFeedDto[] = [];
-
-    for (const food of foods) {
-      const canOrder = await this.locationService.canUserOrder(
-        userId,
-        food.vendorId,
-      );
-
-      if (!canOrder) continue;
-
-      filteredFoods.push({
-        id: food.id,
-        title: food.name,
-        description: food.description,
-        image: food.imageUrl,
-        video: food.mediaUrl,
-        price: food.price,
-        vendor: {
-          id: food.vendor.id,
-          name: food.vendor.name,
-          handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
-        },
-        stats: {
-          likes: food.likes.length,
-          saves: food.saves.length,
-          shares: food.shares.length,
-        },
-        actions: {
-          liked: food.likes.some((l) => l.userId === userId),
-          saved: food.saves.some((s) => s.userId === userId),
-          canShare: true,
-        },
-      });
-    }
-
-    return filteredFoods;
+    };
   }
+
+  const filteredFoods: FoodFeedDto[] = [];
+
+  for (const food of foods) {
+    const canOrder = await this.locationService.canUserOrder(
+      userId,
+      food.vendorId,
+    );
+
+    if (!canOrder) continue;
+
+    filteredFoods.push({
+      id: food.id,
+      title: food.name,
+      description: food.description,
+      image: food.imageUrl,
+      video: food.mediaUrl,
+      price: food.price,
+
+      vendor: {
+        id: food.vendor.id,
+        name: food.vendor.name,
+        handle: `@${food.vendor.name
+          .toLowerCase()
+          .replace(/\s+/g, '')}`,
+      },
+
+      stats: {
+        likes: food.likes.length,
+        saves: food.saves.length,
+        shares: food.shares.length,
+      },
+
+      actions: {
+        liked: food.likes.some(
+          (like) => like.userId === userId,
+        ),
+        saved: food.saves.some(
+          (save) => save.userId === userId,
+        ),
+        canShare: true,
+      },
+    });
+  }
+
+  return {
+    data: filteredFoods,
+    pagination: {
+      page,
+      limit,
+      hasNextPage: foods.length === limit,
+      nextPage: foods.length === limit ? page + 1 : null,
+    },
+  };
+}
 
   /* ===============================
    CREATE CATEGORY
