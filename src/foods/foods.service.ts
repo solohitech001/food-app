@@ -57,61 +57,98 @@ export class FoodsService {
      CREATE FOOD
   =============================== */
 
-  async createFood(userId: string, data: any) {
-    const vendor = await this.getVendorByUser(userId);
+ async createFood(userId: string, data: any) {
+  const vendor = await this.getVendorByUser(userId);
 
-    if (vendor.status !== 'ACTIVE') {
-      throw new ForbiddenException('Vendor not approved yet');
-    }
+  // 1. Vendor must be active
+  if (vendor.status !== 'ACTIVE') {
+    throw new ForbiddenException('Vendor not approved yet');
+  }
 
-    // Validate   category
-    const category = await this.prisma.mealCategory.findUnique({
-      where: { id: data.categoryId },
-    });
+  // 2. Validate meal type
+  const validMealTypes = [
+    'PLATE',
+    'DRINK',
+    'PLATTER',
+    'SIZZLE',
+  ];
 
-    if (!category) {
-      throw new BadRequestException('Invalid category');
-    }
+  if (!validMealTypes.includes(data.mealType)) {
+    throw new BadRequestException(
+      'Invalid meal type. Use PLATE, DRINK, PLATTER, or SIZZLE',
+    );
+  }
 
-    // Validate subcategory (if provided)
-    if (data.subTypeId) {
-      const subType = await this.prisma.mealSubCategory.findFirst({
-        where: {
-          id: data.subTypeId,
-          categoryId: data.categoryId,
-        },
-      });
-
-      if (!subType) {
-        throw new BadRequestException(
-          'Selected subcategory does not belong to the selected category',
-        );
-      }
-    }
-
-    const maxPrice = PRICE_LIMITS[vendor.level];
-
-    if (data.price > maxPrice) {
-      throw new ForbiddenException(
-        `Your vendor level allows a maximum price of ₦${maxPrice}`,
+  // 3. SIZZLE validation
+  if (data.mealType === 'SIZZLE') {
+    if (!data.mediaUrl) {
+      throw new BadRequestException(
+        'A video is required when creating a SIZZLE',
       );
     }
 
-    const payload = {
-      name: data.name,
-      description: data.description,
-      price: data.price,
-      categoryId: data.categoryId,
-      subTypeId: data.subTypeId,
-      imageUrl: data.imageUrl,
-      mediaUrl: data.mediaUrl,
-      vendorId: vendor.id,
-    };
-
-    return this.prisma.food.create({
-      data: payload,
-    });
+    // SIZZLE does not use preparation type
+    data.preparationType = null;
   }
+
+  // 4. PLATE, DRINK and PLATTER validation
+  if (
+    data.mealType === 'PLATE' ||
+    data.mealType === 'DRINK' ||
+    data.mealType === 'PLATTER'
+  ) {
+    if (!data.imageUrl) {
+      throw new BadRequestException(
+        `An image is required when creating a ${data.mealType.toLowerCase()}`,
+      );
+    }
+
+    if (!data.preparationType) {
+      throw new BadRequestException(
+        `Preparation type is required for ${data.mealType.toLowerCase()}`,
+      );
+    }
+
+    const validPreparationTypes = ['READY', 'BY_ORDER'];
+
+    if (!validPreparationTypes.includes(data.preparationType)) {
+      throw new BadRequestException(
+        'Invalid preparation type. Use READY or BY_ORDER',
+      );
+    }
+  }
+
+  // 5. Validate vendor price limit
+  const maxPrice = PRICE_LIMITS[vendor.level];
+
+  if (data.price > maxPrice) {
+    throw new ForbiddenException(
+      `Your vendor level allows a maximum price of ₦${maxPrice}`,
+    );
+  }
+
+  // 6. Create food
+  const payload = {
+    name: data.name,
+    description: data.description,
+    price: Number(data.price),
+
+    mealType: data.mealType,
+    preparationType: data.preparationType ?? null,
+
+    imageUrl: data.imageUrl ?? null,
+    mediaUrl: data.mediaUrl ?? null,
+
+    isAvailable: data.isAvailable ?? true,
+    stock: data.stock ?? null,
+
+    vendorId: vendor.id,
+  };
+
+  return this.prisma.food.create({
+    data: payload,
+  });
+}
 
   /* ===============================
      GET VENDOR FOODS
@@ -374,14 +411,14 @@ export class FoodsService {
 
         price: food.price,
 
-        // vendor: {
+        vendor: {
 
-        //   id: food.vendor.id,
-        //   name: food.vendor.name,
-        //   handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
+          // id: food.vendor.id,
+          name: food.vendor.name,
+          // handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
 
-        // }
-        // ,
+        }
+        ,
 
         stats: {
           // ONLY COUNTS

@@ -7,11 +7,352 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * =====================
- * ENUMS
- * =====================
- */
+model User {
+  id            String      @id @default(uuid())
+  email         String?     @unique
+  password      String?
+  role          Role        @default(CUSTOMER)
+  createdAt     DateTime    @default(now())
+  isVerified    Boolean     @default(false)
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  phoneNumber   String?     @unique
+  city          String?
+  latitude      Float?
+  longitude     Float?
+  state         String?
+  lastOtpSentAt DateTime?
+  updatedAt     DateTime?   @updatedAt
+  foodLikes     FoodLike[]
+  foodSaves     FoodSave[]
+  foodShares    FoodShare[]
+  orders        Order[]
+  reviews       Review[]
+  vendor        Vendor?
+  wallet        Wallet?
+}
+
+model Vendor {
+  id               String               @id @default(uuid())
+  name             String
+  userId           String               @unique
+  createdAt        DateTime             @default(now())
+  status           VendorStatus         @default(PENDING)
+  city             String?
+  deliveryRadiusKm Float                @default(10)
+  latitude         Float?
+  locationLockType LocationLockType     @default(RADIUS)
+  longitude        Float?
+  state            String?
+  level            VendorLevel          @default(LEVEL_1)
+  accountNumber    String?
+  bankCode         String?
+  accountName      String?
+  address          String?
+  averageRating    Float                @default(0)
+  bankName         String?
+  closingTime      String?
+  coverPhoto       String?
+  description      String?
+  email            String?
+  facebook         String?
+  instagram        String?
+  logo             String?
+  openingTime      String?
+  phoneNumber      String?
+  tiktok           String?
+  twitter          String?
+  updatedAt        DateTime?            @updatedAt
+  website          String?
+  foods            Food[]
+  orders           Order[]
+  reviews          Review[]
+  user             User                 @relation(fields: [userId], references: [id])
+  badges           VendorBadge[]
+  vendorDocuments  VendorDocument[]
+  notifications    VendorNotification[]
+  deliveryZones    VendorZone[]
+  wallet           Wallet?
+
+  @@index([status])
+  @@index([city])
+  @@index([state])
+  @@index([level])
+}
+
+model VendorNotification {
+  id        String   @id @default(uuid())
+  vendorId  String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+}
+
+model VendorZone {
+  id       String @id @default(uuid())
+  vendorId String
+  name     String
+  polygon  Json
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+}
+
+model VendorDocument {
+  id        String             @id @default(uuid())
+  vendorId  String
+  type      VendorDocumentType
+  fileUrl   String
+  status    DocumentStatus     @default(PENDING)
+  comment   String?
+  createdAt DateTime           @default(now())
+  vendor    Vendor             @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+model MealCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  image     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  subTypes MealSubCategory[]
+
+  @@index([name])
+  @@index([sortOrder])
+}
+
+model MealSubCategory {
+  id         String   @id @default(uuid())
+  name       String
+  categoryId String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category MealCategory @relation(fields: [categoryId], references: [id])
+
+  @@unique([name, categoryId])
+  @@index([categoryId])
+  @@index([sortOrder])
+}
+
+model Food {
+  id       String @id @default(uuid())
+  name     String
+  price    Float
+  vendorId String
+
+  mealType MealType?
+
+  preparationType PreparationType?
+
+  description String?
+
+  imageUrl String?
+  mediaUrl String?
+
+  isAvailable Boolean @default(true)
+  stock       Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  likes      FoodLike[]
+  saves      FoodSave[]
+  shares     FoodShare[]
+  orderItems OrderItem[]
+
+  @@index([vendorId])
+  @@index([mealType])
+  @@index([preparationType])
+}
+
+model FoodLike {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String
+  createdAt DateTime @default(now())
+  food      Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, userId])
+}
+
+model FoodSave {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String
+  createdAt DateTime @default(now())
+  food      Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([foodId, userId])
+}
+
+model FoodShare {
+  id        String   @id @default(uuid())
+  foodId    String
+  userId    String?
+  createdAt DateTime @default(now())
+  food      Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model Wallet {
+  id                   String        @id @default(uuid())
+  userId               String?       @unique
+  vendorId             String?       @unique
+  balance              Float         @default(0)
+  flutterwaveRef       String
+  withdrawalsThisMonth Int           @default(0)
+  createdAt            DateTime      @default(now())
+  currency             String        @default("NGN")
+  version              Int           @default(0)
+  updatedAt            DateTime      @updatedAt
+  virtualAccountNumber String        @unique
+  virtualBankName      String
+  escrowsToVendor      Escrow[]      @relation("VendorEscrow")
+  escrowsHeld          Escrow[]      @relation("UserEscrow")
+  transactions         Transaction[]
+  user                 User?         @relation(fields: [userId], references: [id])
+  vendor               Vendor?       @relation(fields: [vendorId], references: [id])
+  withdrawals          Withdrawal[]
+}
+
+model Transaction {
+  id           String            @id @default(uuid())
+  walletId     String
+  amount       Float
+  type         TransactionType
+  source       TransactionSource
+  reference    String            @unique
+  narration    String
+  createdAt    DateTime          @default(now())
+  balanceAfter Float?
+  status       String            @default("SUCCESS")
+  userId       String?
+  updatedAt    DateTime          @updatedAt
+  wallet       Wallet            @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+}
+
+model Withdrawal {
+  id        String   @id @default(uuid())
+  walletId  String
+  amount    Float
+  status    String
+  reference String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  wallet    Wallet   @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  foodId    String
+  quantity  Int      @default(1)
+  price     Float
+  createdAt DateTime @default(now())
+  food      Food     @relation(fields: [foodId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId, foodId])
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  amount        Float
+  vendorId      String
+  acceptBy      DateTime
+  completedAt   DateTime?
+  deliveredAt   DateTime?
+  reference     String      @unique
+  paymentStatus String      @default("PENDING")
+  escrow        Escrow?
+  user          User        @relation(fields: [userId], references: [id])
+  vendor        Vendor      @relation(fields: [vendorId], references: [id])
+  items         OrderItem[]
+  review        Review?
+
+  @@index([vendorId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Escrow {
+  id             String       @id @default(uuid())
+  orderId        String       @unique
+  walletId       String
+  vendorWalletId String
+  amount         Float
+  status         EscrowStatus @default(HELD)
+  createdAt      DateTime     @default(now())
+  refundedAt     DateTime?
+  releasedAt     DateTime?
+  reference      String       @unique
+  order          Order        @relation(fields: [orderId], references: [id])
+  vendorWallet   Wallet       @relation("VendorEscrow", fields: [vendorWalletId], references: [id])
+  wallet         Wallet       @relation("UserEscrow", fields: [walletId], references: [id])
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  vendorId  String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@index([userId])
+}
+
+model VendorBadge {
+  id        String   @id @default(uuid())
+  vendorId  String
+  type      String
+  createdAt DateTime @default(now())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+}
+
+model WebhookEvent {
+  id        String   @id @default(uuid())
+  reference String   @unique
+  source    String
+  createdAt DateTime @default(now())
+  payload   Json?
+  status    String   @default("PROCESSED")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  target    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
 
 enum Role {
   CUSTOMER
@@ -19,12 +360,24 @@ enum Role {
   ADMIN
 }
 
+enum MealType {
+  PLATE
+  DRINK
+  PLATTER
+  SIZZLE
+}
+
+enum PreparationType {
+  READY
+  BY_ORDER
+}
+
 enum VendorStatus {
   PENDING
-  UNDER_REVIEW
   ACTIVE
   REJECTED
   SUSPENDED
+  UNDER_REVIEW
 }
 
 enum LocationLockType {
@@ -37,11 +390,11 @@ enum LocationLockType {
 enum OrderStatus {
   PENDING
   PREPARING
+  DELIVERED
+  CANCELLED
+  COMPLETED
   READY
   OUT_FOR_DELIVERY
-  DELIVERED
-  COMPLETED
-  CANCELLED
 }
 
 enum VendorDocumentType {
@@ -63,9 +416,9 @@ enum TransactionType {
 }
 
 enum TransactionSource {
+  FLUTTERWAVE
   TRANSFER
   WITHDRAWAL
-  FLUTTERWAVE
   ESCROW
 }
 
@@ -80,517 +433,4 @@ enum VendorLevel {
   LEVEL_2
   LEVEL_3
   LEVEL_4
-}
-
-/**
- * =====================
- * USER
- * =====================
- */
-
-model User {
-  id          String  @id @default(uuid())
-  phoneNumber String? @unique
-  email       String? @unique
-  password    String?
-  role        Role    @default(CUSTOMER)
-  isVerified  Boolean @default(false)
-
-  latitude  Float?
-  longitude Float?
-  city      String?
-  state     String?
-
-  otpCode       String?
-  otpExpiresAt  DateTime?
-  lastOtpSentAt DateTime?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime? @updatedAt
-
-  vendor  Vendor?
-  wallet  Wallet?
-  orders  Order[]
-  reviews Review[]
-
-  foodLikes  FoodLike[]
-  foodSaves  FoodSave[]
-  foodShares FoodShare[]
-}
-
-/**
- * =====================
- * VENDOR
- * =====================
- */
-
-model Vendor {
-  id     String @id @default(uuid())
-  name   String
-  userId String @unique
-
-  status        VendorStatus         @default(PENDING)
-  notifications VendorNotification[]
-
-  // Existing
-  latitude  Float?
-  longitude Float?
-  city      String?
-  state     String?
-
-  // NEW
-  address     String?
-  description String?
-
-  logo       String?
-  coverPhoto String?
-
-  email       String?
-  phoneNumber String?
-
-  website String?
-
-  instagram String?
-  facebook  String?
-  twitter   String?
-  tiktok    String?
-
-  openingTime String?
-  closingTime String?
-
-  averageRating Float @default(0)
-
-  deliveryRadiusKm Float            @default(10)
-  locationLockType LocationLockType @default(RADIUS)
-  level            VendorLevel      @default(LEVEL_1)
-
-  accountNumber String?
-  accountName   String?
-  bankName      String?
-  bankCode      String?
-
-  user            User             @relation(fields: [userId], references: [id])
-  wallet          Wallet?
-  foods           Food[]
-  deliveryZones   VendorZone[]
-  vendorDocuments VendorDocument[]
-  orders          Order[]
-  reviews         Review[]
-  badges          VendorBadge[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime? @updatedAt
-
-  @@index([status])
-  @@index([city])
-  @@index([state])
-  @@index([level])
-}
-
-model VendorNotification {
-  id       String @id @default(uuid())
-  vendorId String
-
-  title   String
-  message String
-
-  isRead Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-
-  @@index([vendorId])
-}
-
-/**
- * =====================
- * VENDOR ZONES
- * =====================
- */
-
-model VendorZone {
-  id       String @id @default(uuid())
-  vendorId String
-  name     String
-  polygon  Json
-
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-
-  @@index([vendorId])
-}
-
-/**
- * =====================
- * VENDOR DOCUMENTS
- * =====================
- */
-
-model VendorDocument {
-  id       String             @id @default(uuid())
-  vendorId String
-  type     VendorDocumentType
-  fileUrl  String
-
-  status  DocumentStatus @default(PENDING)
-  comment String?
-
-  createdAt DateTime @default(now())
-
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-
-  @@index([vendorId])
-  @@index([status])
-}
-
-/**
- * =====================
- * FOOD
- * =====================
- */
-
-model MealCategory {
-  id        String  @id @default(uuid())
-  name      String  @unique
-  image     String?
-  sortOrder Int     @default(0)
-
-  createdAt DateTime @default(now())
-
-  subTypes MealSubCategory[]
-  foods    Food[]
-
-  @@index([name])
-  @@index([sortOrder])
-}
-
-model MealSubCategory {
-  id   String @id @default(uuid())
-  name String
-
-  categoryId String
-  category   MealCategory @relation(fields: [categoryId], references: [id])
-
-  sortOrder Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  foods Food[]
-
-  @@unique([name, categoryId])
-  @@index([categoryId])
-  @@index([sortOrder])
-}
-
-model Food {
-  id          String @id @default(uuid())
-  vendorId    String
-
-  name        String
-  description String?
-  price       Float
-
-  categoryId  String
-  subTypeId   String?
-
-  category MealCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  subType  MealSubCategory? @relation(fields: [subTypeId], references: [id], onDelete: SetNull)
-
-  imageUrl String?
-  mediaUrl String?
-
-  isAvailable Boolean @default(true)
-  stock       Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-
-  orderItems OrderItem[]
-  likes      FoodLike[]
-  saves      FoodSave[]
-  shares     FoodShare[]
-
-  @@index([vendorId])
-  @@index([categoryId])
-  @@index([subTypeId])
-}
-
-/**
- * =====================
- * FOOD ENGAGEMENT
- * =====================
- */
-
-model FoodLike {
-  id        String   @id @default(uuid())
-  foodId    String
-  userId    String
-  createdAt DateTime @default(now())
-
-  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([foodId, userId])
-}
-
-model FoodSave {
-  id        String   @id @default(uuid())
-  foodId    String
-  userId    String
-  createdAt DateTime @default(now())
-
-  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([foodId, userId])
-}
-
-model FoodShare {
-  id        String   @id @default(uuid())
-  foodId    String
-  userId    String?
-  createdAt DateTime @default(now())
-
-  food Food  @relation(fields: [foodId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-}
-
-/**
- * =====================
- * WALLET
- * =====================
- */
-
-model Wallet {
-  id String @id @default(uuid())
-
-  userId   String? @unique
-  vendorId String? @unique
-
-  balance  Float  @default(0)
-  currency String @default("NGN")
-  version  Int    @default(0)
-
-  // Virtual Account Details
-  virtualAccountNumber String @unique
-  virtualBankName      String
-  flutterwaveRef       String
-
-  withdrawalsThisMonth Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user   User?   @relation(fields: [userId], references: [id])
-  vendor Vendor? @relation(fields: [vendorId], references: [id])
-
-  transactions Transaction[]
-  withdrawals  Withdrawal[]
-
-  escrowsHeld     Escrow[] @relation("UserEscrow")
-  escrowsToVendor Escrow[] @relation("VendorEscrow")
-}
-
-/**
- * =====================
- * TRANSACTION
- * =====================
- */
-
-model Transaction {
-  id       String  @id @default(uuid())
-  walletId String
-  userId   String?
-
-  amount Float
-  type   TransactionType
-  source TransactionSource
-
-  reference String @unique
-  narration String
-
-  status       String @default("SUCCESS")
-  balanceAfter Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  wallet Wallet @relation(fields: [walletId], references: [id])
-
-  @@index([walletId])
-}
-
-/**
- * =====================
- * WITHDRAWALS
- * =====================
- */
-
-model Withdrawal {
-  id        String @id @default(uuid())
-  walletId  String
-  amount    Float
-  status    String
-  reference String @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  wallet Wallet @relation(fields: [walletId], references: [id])
-
-  @@index([walletId])
-}
-
-/**
- * =====================
- * ORDER ITEMS
- * =====================
- */
-
-model OrderItem {
-  id       String @id @default(uuid())
-  orderId  String
-  foodId   String
-  quantity Int    @default(1)
-  price    Float
-
-  createdAt DateTime @default(now())
-
-  order Order @relation(fields: [orderId], references: [id])
-  food  Food  @relation(fields: [foodId], references: [id])
-
-  @@unique([orderId, foodId])
-}
-
-/**
- * =====================
- * ORDER
- * =====================
- */
-
-model Order {
-  id       String      @id @default(uuid())
-  userId   String
-  vendorId String
-  amount   Float
-  status   OrderStatus @default(PENDING)
-
-  paymentStatus String @default("PENDING")
-
-  acceptBy    DateTime
-  reference   String    @unique
-  deliveredAt DateTime?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-
-  user   User   @relation(fields: [userId], references: [id])
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-
-  items  OrderItem[]
-  escrow Escrow?
-  review Review?
-
-  @@index([vendorId])
-  @@index([userId])
-  @@index([status])
-}
-
-/**
- * =====================
- * ESCROW
- * =====================
- */
-
-model Escrow {
-  id             String @id @default(uuid())
-  orderId        String @unique
-  walletId       String
-  vendorWalletId String
-
-  amount     Float
-  status     EscrowStatus @default(HELD)
-  reference  String       @unique
-  createdAt  DateTime     @default(now())
-  releasedAt DateTime?
-  refundedAt DateTime?
-
-  order        Order  @relation(fields: [orderId], references: [id])
-  wallet       Wallet @relation("UserEscrow", fields: [walletId], references: [id])
-  vendorWallet Wallet @relation("VendorEscrow", fields: [vendorWalletId], references: [id])
-}
-
-/**
- * =====================
- * REVIEWS
- * =====================
- */
-
-model Review {
-  id       String @id @default(uuid())
-  orderId  String @unique
-  vendorId String
-  userId   String
-
-  rating  Int
-  comment String?
-
-  createdAt DateTime @default(now())
-
-  order  Order  @relation(fields: [orderId], references: [id])
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@index([vendorId])
-  @@index([userId])
-}
-
-/**
- * =====================
- * VENDOR BADGES
- * =====================
- */
-
-model VendorBadge {
-  id       String @id @default(uuid())
-  vendorId String
-  type     String
-
-  createdAt DateTime @default(now())
-
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-}
-
-/**
- * =====================
- * WEBHOOK EVENTS
- * =====================
- */
-
-model WebhookEvent {
-  id        String @id @default(uuid())
-  reference String @unique
-  source    String
-  status    String @default("PROCESSED")
-  payload   Json?
-
-  createdAt DateTime @default(now())
-}
-
-/**
- * =====================
- * AUDIT LOGS
- * =====================
- */
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  actorId   String?
-  action    String
-  target    String?
-  metadata  Json?
-  createdAt DateTime @default(now())
 }

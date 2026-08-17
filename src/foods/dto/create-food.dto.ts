@@ -2,10 +2,16 @@ import {
   IsString,
   IsNumber,
   IsOptional,
-  IsUUID,
+  IsEnum,
+  IsBoolean,
+  IsInt,
 } from 'class-validator';
+
 import { Type } from 'class-transformer';
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+import { MealType, PreparationType } from '@prisma/client';
 
 export class CreateFoodDto {
   @ApiProperty({
@@ -32,19 +38,54 @@ export class CreateFoodDto {
   description?: string;
 
   @ApiProperty({
-    description: 'Meal Category ID',
-    example: 'd6cb5fd2-fd58-45b4-baf9-4d6b1c5b3d9a',
+    description: 'Type of meal PLATE, DRINK, PLATTER, SIZZLE',
+    enum: MealType,
+    example: MealType.PLATE,
   })
-  @IsUUID()
-  categoryId: string;
+  @IsEnum(MealType)
+  mealType: MealType;
 
   @ApiPropertyOptional({
-    description: 'Meal Sub Category ID',
-    example: '8dc4f0d6-7d35-4d0d-8dc5-6d94f8e3b4e1',
+    description: 'How the meal is prepared',
+    enum: PreparationType,
+    example: PreparationType.READY,
   })
   @IsOptional()
-  @IsUUID()
-  subTypeId?: string;
+  @IsEnum(PreparationType)
+  preparationType?: PreparationType;
+
+  @ApiPropertyOptional({
+    description: 'URL of the food image',
+    example: 'https://example.com/jollof-rice.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'URL of the food video/media',
+    example: 'https://example.com/jollof-rice.mp4',
+  })
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the food is currently available',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAvailable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Available stock quantity',
+    example: 20,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  stock?: number;
 }
 
 export class UpdateFoodDto {
@@ -72,20 +113,55 @@ export class UpdateFoodDto {
   price?: number;
 
   @ApiPropertyOptional({
-    description: 'Updated Meal Category ID',
-    example: 'd6cb5fd2-fd58-45b4-baf9-4d6b1c5b3d9a',
+    description: 'Updated meal type',
+    enum: MealType,
+    example: MealType.PLATE,
   })
   @IsOptional()
-  @IsUUID()
-  categoryId?: string;
+  @IsEnum(MealType)
+  mealType?: MealType;
 
   @ApiPropertyOptional({
-    description: 'Updated Meal Sub Category ID',
-    example: '8dc4f0d6-7d35-4d0d-8dc5-6d94f8e3b4e1',
+    description: 'Updated preparation type',
+    enum: PreparationType,
+    example: PreparationType.BY_ORDER,
   })
   @IsOptional()
-  @IsUUID()
-  subTypeId?: string;
+  @IsEnum(PreparationType)
+  preparationType?: PreparationType;
+
+  @ApiPropertyOptional({
+    description: 'Updated food image URL',
+    example: 'https://example.com/food.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Updated food video/media URL',
+    example: 'https://example.com/food-video.mp4',
+  })
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the food is available',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAvailable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Updated stock quantity',
+    example: 15,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  stock?: number;
 }
 
 export class EmptyActionDto {}

@@ -40,6 +40,7 @@ import {
 } from './dto/create-food.dto';
 import { FoodFeedDto } from './dto/food-feed.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { MealType } from '@prisma/client';
 
 @ApiTags('foods')
 @Controller('foods')
@@ -204,61 +205,87 @@ export class FoodsController {
       { storage: memoryStorage() },
     ),
   )
-  async createFood(
-    @Req() req: any,
-    @UploadedFiles()
-    files: { image?: Express.Multer.File[]; media?: Express.Multer.File[] },
-    @Body() body: CreateFoodDto,
-  ) {
-    if (!files.image || files.image.length === 0) {
-      throw new BadRequestException('Food image is required');
+ async createFood(
+  @Req() req: any,
+  @UploadedFiles()
+  files: {
+    image?: Express.Multer.File[];
+    media?: Express.Multer.File[];
+  },
+  @Body() body: CreateFoodDto,
+) {
+  // Image is required for every food
+  if (!files.image || files.image.length === 0) {
+    throw new BadRequestException('Food image is required');
+  }
+
+  if (!body.name || !body.price) {
+    throw new BadRequestException('Name and price are required');
+  }
+
+  const userId = req.user.id;
+  const imageFile = files.image[0];
+
+  // Validate image
+  if (!imageFile.mimetype.startsWith('image/')) {
+    throw new BadRequestException('Only image files are allowed');
+  }
+
+  // Upload image
+  const imageUrl = await this.storageService.uploadFile(
+    imageFile,
+    'foods/images/',
+  );
+
+  let mediaUrl: string | undefined;
+
+  // Check whether a video was uploaded
+  if (files.media && files.media.length > 0) {
+    const videoFile = files.media[0];
+
+    if (!videoFile.mimetype.startsWith('video/')) {
+      throw new BadRequestException('Only video files are allowed');
     }
 
-    if (!body.name || !body.price) {
-      throw new BadRequestException('Name and price are required');
-    }
-
-    const userId = req.user.id;
-    const imageFile = files.image[0];
-
-    if (!imageFile.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Only image files allowed');
-    }
-
-    const imageUrl = await this.storageService.uploadFile(
-      imageFile,
-      'foods/images/',
-    );
-
-    let mediaUrl: string | undefined;
-
-    if (files.media && files.media.length > 0) {
-      const videoFile = files.media[0];
-
-      if (!videoFile.mimetype.startsWith('video/')) {
-        throw new BadRequestException('Only video files allowed');
-      }
-
-      if (videoFile.size > 50 * 1024 * 1024) {
-        throw new BadRequestException('Video too large (max 50MB)');
-      }
-
-      mediaUrl = await this.storageService.uploadFile(
-        videoFile,
-        'foods/videos/',
+    if (videoFile.size > 50 * 1024 * 1024) {
+      throw new BadRequestException(
+        'Video too large (max 50MB)',
       );
     }
 
-    return this.foodsService.createFood(userId, {
-      name: body.name,
-      description: body.description,
-      price: Number(body.price),
-      categoryId: body.categoryId,
-      subTypeId: body.subTypeId,
-      imageUrl,
-      mediaUrl,
-    });
+    mediaUrl = await this.storageService.uploadFile(
+      videoFile,
+      'foods/videos/',
+    );
   }
+
+  // SIZZLE requires a video
+  if (body.mealType === MealType.SIZZLE && !mediaUrl) {
+    throw new BadRequestException(
+      'A video is required when creating a Sizzle',
+    );
+  }
+
+  return this.foodsService.createFood(userId, {
+    name: body.name,
+    description: body.description,
+    price: Number(body.price),
+
+    // Meal classification
+    mealType: body.mealType,
+
+    // Preparation
+    preparationType: body.preparationType,
+
+    // Media
+    imageUrl,
+    mediaUrl,
+
+    // Inventory
+    isAvailable: body.isAvailable,
+    stock: body.stock,
+  });
+}
 
   /* ==========================================================================
      ❤️ LIKE / SAVE / SHARE

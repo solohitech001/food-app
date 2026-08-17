@@ -1,14 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 class VendorDto {
-  @ApiProperty({ description: 'Vendor ID', example: 'vendor_123' })
-  id: string;
+  // @ApiProperty({ description: 'Vendor ID', example: 'vendor_123' })
+  // id: string;
 
   @ApiProperty({ description: 'Vendor name', example: 'Mama’s Kitchen' })
   name: string;
 
-  @ApiProperty({ description: 'Vendor handle', example: '@mamaskitchen' })
-  handle: string;
+  // @ApiProperty({ description: 'Vendor handle', example: '@mamaskitchen' })
+  // handle: string;
 }
 
 class StatsDto {
@@ -52,8 +52,8 @@ export class FoodFeedDto {
   @ApiProperty({ description: 'Food price in Naira', example: 2500 })
   price: number;
 
-  // @ApiProperty({ description: 'Vendor details', type: VendorDto })
-  // vendor: VendorDto;
+  @ApiProperty({ description: 'Vendor details', type: VendorDto })
+  vendor: VendorDto;
 
   @ApiProperty({ description: 'Food statistics', type: StatsDto })
   stats: StatsDto;
