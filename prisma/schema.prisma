@@ -30,6 +30,7 @@ model User {
   reviews       Review[]
   vendor        Vendor?
   wallet        Wallet?
+  cart          Cart?
 }
 
 model Vendor {
@@ -73,6 +74,7 @@ model Vendor {
   notifications    VendorNotification[]
   deliveryZones    VendorZone[]
   wallet           Wallet?
+  carts            Cart[]
 
   @@index([status])
   @@index([city])
@@ -171,6 +173,7 @@ model Food {
   saves      FoodSave[]
   shares     FoodShare[]
   orderItems OrderItem[]
+  cartItems  CartItem[]
 
   @@index([vendorId])
   @@index([mealType])
@@ -294,6 +297,36 @@ model Order {
   @@index([vendorId])
   @@index([userId])
   @@index([status])
+}
+
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  vendorId  String? // Enforces single-vendor restriction per cart session
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  items  CartItem[]
+
+  @@index([userId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  foodId    String
+  quantity  Int      @default(1)
+  price     Float // Price snapshot at the time of adding
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, foodId])
+  @@index([cartId])
 }
 
 model Escrow {

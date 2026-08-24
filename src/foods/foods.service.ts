@@ -413,9 +413,9 @@ export class FoodsService {
 
         vendor: {
 
-          // id: food.vendor.id,
+          id: food.vendor.id,
           name: food.vendor.name,
-          // handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
+          handle: `@${food.vendor.name.toLowerCase().replace(/\s+/g, '')}`,
 
         }
         ,

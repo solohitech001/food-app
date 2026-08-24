@@ -30,7 +30,7 @@ export class CreateFoodDto {
   price: number;
 
   @ApiPropertyOptional({
-    description: 'Optional food description',
+    description: 'Optional   food description',
     example: 'Spicy Nigerian Jollof Rice served with grilled chicken.',
   })
   @IsOptional()

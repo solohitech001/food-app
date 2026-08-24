@@ -20,6 +20,7 @@ import { AfricasTalkingModule } from './africastalking/africastalking.module';
 import { AfricastalkingVoiceService } from './africastalking-voice/africastalking-voice.service';
 import { OrderItemsModule } from './order-items/order-items.module';
 import { TransactionModule } from './transaction/transaction.module';
+import { CartModule } from './cart/cart.module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { TransactionModule } from './transaction/transaction.module';
     EscrowModule,
     AfricasTalkingModule,
     OrderItemsModule,
-    TransactionModule
+    TransactionModule,
+    CartModule
   ],
   controllers: [AppController],
   providers: [AppService, AfricastalkingVoiceService],
