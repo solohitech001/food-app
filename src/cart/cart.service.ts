@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service'; // Adjust path if needed
+import { PrismaService } from '../prisma/prisma.service'; //   Adjust    path if needed
 import { AddToCartDto, UpdateCartItemDto } from "./dto/add-to-cart.dto";
 
 
 @Injectable()
-export class CartService {
+export class CartService  {
   constructor(private readonly prisma: PrismaService) {}
 
   async getCart(userId: string) {
