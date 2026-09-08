@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, ValidateNested, IsString, IsInt, Min } from 'class-validator';
+import {
+  IsArray,
+  ValidateNested,
+  IsString,
+  IsInt,
+  Min,
+  IsNotEmpty,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrderItemDto {
@@ -8,6 +15,7 @@ export class OrderItemDto {
     example: 'food-uuid-123',
   })
   @IsString()
+  @IsNotEmpty()
   foodId: string;
 
   @ApiProperty({
@@ -19,12 +27,13 @@ export class OrderItemDto {
   quantity: number;
 }
 
-export class CreateOrderDto {
+export class CreateOrderWithItemsDto {
   @ApiProperty({
     description: 'Vendor ID',
     example: 'vendor-uuid-123',
   })
   @IsString()
+  @IsNotEmpty()
   vendorId: string;
 
   @ApiProperty({
@@ -36,3 +45,5 @@ export class CreateOrderDto {
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 }
+
+export class EmptyOrderActionDto {}
