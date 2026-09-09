@@ -5,16 +5,22 @@ import {
   Body,
   Req,
   Param,
-  ParseFloatPipe,
+  BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
+
 import { WalletService } from './wallet.service';
 import { TransactionService } from '../transaction/transaction.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
   constructor(
     private walletService: WalletService,
     private transactionService: TransactionService,
+    private prisma: PrismaService,
   ) {}
 
   /* ============================
@@ -22,7 +28,8 @@ export class WalletController {
   ============================ */
   @Post('create')
   async createWallet(@Req() req: any) {
-    const userId = req.user.id; // from auth guard
+    const userId = req.user.id;
+
     return this.walletService.createUserWallet(userId);
   }
 
@@ -31,8 +38,23 @@ export class WalletController {
   ============================ */
   @Post('create/vendor')
   async createVendorWallet(@Req() req: any) {
-    const vendorId = req.user.vendorId;
-    return this.walletService.createVendorWallet(vendorId);
+    console.log('Creating vendor wallet for user:', req.user);
+
+    const userId = req.user.id;
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        userId,
+      },
+    });
+
+    if (!vendor) {
+      throw new BadRequestException('Vendor profile not found');
+    }
+
+    console.log('Found vendor:', vendor.id);
+
+    return this.walletService.createVendorWallet(vendor.id);
   }
 
   /* ============================
@@ -40,8 +62,7 @@ export class WalletController {
   ============================ */
   @Get('me')
   async getMyWallet(@Req() req: any) {
-    const userId = req.user.id;
-    return this.walletService.getMyWallet(userId);
+    return this.walletService.getMyWallet(req.user.id);
   }
 
   /* ============================
@@ -49,8 +70,7 @@ export class WalletController {
   ============================ */
   @Get('balance')
   async getBalance(@Req() req: any) {
-    const userId = req.user.id;
-    return this.walletService.getBalance(userId);
+    return this.walletService.getBalance(req.user.id);
   }
 
   /* ============================
@@ -65,17 +85,15 @@ export class WalletController {
       amount: number;
     },
   ) {
-    const userId = req.user.id;
-
     return this.walletService.transferToVendor(
-      userId,
+      req.user.id,
       body.vendorId,
       body.amount,
     );
   }
 
   /* ============================
-     WITHDRAW (VENDOR)
+     WITHDRAW
   ============================ */
   @Post('withdraw')
   async withdraw(
@@ -85,9 +103,20 @@ export class WalletController {
       amount: number;
     },
   ) {
-    const vendorId = req.user.vendorId;
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        userId: req.user.id,
+      },
+    });
 
-    return this.walletService.withdraw(vendorId, body.amount);
+    if (!vendor) {
+      throw new BadRequestException('Vendor profile not found');
+    }
+
+    return this.walletService.withdraw(
+      vendor.id,
+      body.amount,
+    );
   }
 
   /* ============================
@@ -95,15 +124,20 @@ export class WalletController {
   ============================ */
   @Get('transactions')
   async getTransactions(@Req() req: any) {
-    const userId = req.user.id;
-    return this.transactionService.getUserTransactions(userId);
+    return this.transactionService.getUserTransactions(
+      req.user.id,
+    );
   }
 
   /* ============================
      ADMIN / DEBUG
   ============================ */
   @Get(':walletId')
-  async getWalletById(@Param('walletId') walletId: string) {
-    return this.transactionService.getWalletTransactions(walletId);
+  async getWalletById(
+    @Param('walletId') walletId: string,
+  ) {
+    return this.transactionService.getWalletTransactions(
+      walletId,
+    );
   }
 }

@@ -5,40 +5,40 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client/wasm';
-import { CreateOrderWithItemsDto } from './dto/create-order-with-items.dto';  // ✅ FIXED
+import { CreateOrderWithItemsDto } from './dto/create-order-with-items.dto'; // ✅ FIXED
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
   /* ============================
-     CREATE ORDER + ITEMS + ESCROW
+     CREATE ORDER + ITEMS  + ESCROW
   ============================ */
   async createOrder(userId: string, dto: CreateOrderWithItemsDto) {
     const { vendorId, items } = dto;
+    console.log('Creating order for user:', userId, 'with vendor:', vendorId, 'and items:', items);
 
     if (!items || items.length === 0) {
-      throw new BadRequestException('No items provided');
+      throw new BadRequestException('No items  provided');
     }
 
     // 🔍 Get vendor
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
     });
+    console.log('Vendor found:', vendor);
 
     if (!vendor) {
       throw new BadRequestException('Vendor not found');
     }
 
-    const vendorWallet = await this.prisma.wallet.findFirst({
-      where: { userId: vendor.userId }, // ✅ FIX
+    const vendorWallet = await this.prisma.wallet.findUnique({
+      where: { vendorId: vendor.id },
     });
 
     if (!vendorWallet) {
       throw new BadRequestException('Vendor wallet not found');
     }
-
-   
 
     const userWallet = await this.prisma.wallet.findFirst({
       where: { userId },
