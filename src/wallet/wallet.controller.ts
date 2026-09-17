@@ -27,17 +27,34 @@ export class WalletController {
      CREATE USER WALLET
   ============================ */
   @Post('create')
-  async createWallet(@Req() req: any) {
+  async createWallet(
+    @Req() req: any,
+    @Body()
+    body: {
+      bvn?: string;
+      nin?: string;
+    },
+  ) {
     const userId = req.user.id;
 
-    return this.walletService.createUserWallet(userId);
+    return this.walletService.createUserWallet(userId, {
+      bvn: body.bvn,
+      nin: body.nin,
+    });
   }
 
   /* ============================
      CREATE VENDOR WALLET
   ============================ */
   @Post('create/vendor')
-  async createVendorWallet(@Req() req: any) {
+  async createVendorWallet(
+    @Req() req: any,
+    @Body()
+    body: {
+      bvn?: string;
+      nin?: string;
+    },
+  ) {
     console.log('Creating vendor wallet for user:', req.user);
 
     const userId = req.user.id;
@@ -54,7 +71,10 @@ export class WalletController {
 
     console.log('Found vendor:', vendor.id);
 
-    return this.walletService.createVendorWallet(vendor.id);
+    return this.walletService.createVendorWallet(vendor.id, {
+      bvn: body.bvn,
+      nin: body.nin,
+    });
   }
 
   /* ============================

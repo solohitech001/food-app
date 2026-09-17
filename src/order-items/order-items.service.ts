@@ -8,138 +8,309 @@ import { OrderStatus } from '@prisma/client/wasm';
 import { CreateOrderWithItemsDto } from './dto/create-order-with-items.dto'; // ✅ FIXED
 
 @Injectable()
-export class OrdersService {
+export class OrdersService  {
   constructor(private prisma: PrismaService) {}
 
   /* ============================
      CREATE ORDER + ITEMS  + ESCROW
   ============================ */
-  async createOrder(userId: string, dto: CreateOrderWithItemsDto) {
-    const { vendorId, items } = dto;
-    console.log('Creating order for user:', userId, 'with vendor:', vendorId, 'and items:', items);
+async createOrder(userId: string) {
+  console.log('========================================');
+  console.log('🛒 CREATE ORDER FROM CART');
+  console.log('========================================');
+  console.log('👤 User ID:', userId);
 
-    if (!items || items.length === 0) {
-      throw new BadRequestException('No items  provided');
+  // ============================================================
+  // 🛒 GET USER CART
+  // ============================================================
+
+  const cart = await this.prisma.cart.findUnique({
+    where: { userId },
+    include: {
+      items: {
+        include: {
+          food: true,
+        },
+      },
+      vendor: true,
+    },
+  });
+
+  if (!cart) {
+    throw new BadRequestException('Cart not found');
+  }
+
+  if (!cart.items || cart.items.length === 0) {
+    throw new BadRequestException('Your cart is empty');
+  }
+
+  console.log('🛒 Cart:', {
+    id: cart.id,
+    userId: cart.userId,
+    vendorId: cart.vendorId,
+    items: cart.items.length,
+  });
+
+  // ============================================================
+  // 🏪 DERIVE VENDOR FROM CART
+  // ============================================================
+
+  const vendorId = cart.vendorId;
+
+  if (!vendorId) {
+    throw new BadRequestException(
+      'Cart is not associated with a vendor',
+    );
+  }
+
+  const vendor = await this.prisma.vendor.findUnique({
+    where: { id: vendorId },
+  });
+
+  if (!vendor) {
+    throw new BadRequestException('Vendor not found');
+  }
+
+  console.log('🏪 Vendor:', {
+    id: vendor.id,
+    name: vendor.name,
+  });
+
+  // ============================================================
+  // 💰 GET VENDOR WALLET
+  // ============================================================
+
+  const vendorWallet = await this.prisma.wallet.findUnique({
+    where: {
+      vendorId: vendor.id,
+    },
+  });
+
+  if (!vendorWallet) {
+    throw new BadRequestException(
+      'Vendor wallet not found',
+    );
+  }
+
+  console.log('🏦 Vendor wallet:', {
+    id: vendorWallet.id,
+    vendorId: vendorWallet.vendorId,
+    balance: vendorWallet.balance,
+  });
+
+  // ============================================================
+  // 👤 GET CUSTOMER WALLET
+  // ============================================================
+
+  const userWallet = await this.prisma.wallet.findFirst({
+    where: {
+      userId,
+    },
+  });
+
+  if (!userWallet) {
+    throw new BadRequestException(
+      'User wallet not  found',
+    );
+  }
+
+  console.log('💰 User wallet:', {
+    id: userWallet.id,
+    balance: userWallet.balance,
+  });
+
+  // ============================================================
+  // 🍔 VALIDATE CART ITEMS
+  // ============================================================
+
+  let totalAmount = 0;
+
+  const orderItemsData = cart.items.map((item) => {
+    const food = item.food;
+
+    if (!food) {
+      throw new BadRequestException(
+        `Food ${item.foodId} not found`,
+      );
     }
 
-    // 🔍 Get vendor
-    const vendor = await this.prisma.vendor.findUnique({
-      where: { id: vendorId },
+    if (!food.isAvailable) {
+      throw new BadRequestException(
+        `${food.name} is no longer available`,
+      );
+    }
+
+    if (item.quantity <= 0) {
+      throw new BadRequestException(
+        `Invalid quantity for ${food.name}`,
+      );
+    }
+
+    // Make sure the cart is internally consistent.
+    if (food.vendorId !== vendorId) {
+      throw new BadRequestException(
+        `${food.name} does not belong to the cart vendor`,
+      );
+    }
+
+    const price = Number(food.price);
+    const itemTotal = price * item.quantity;
+
+    totalAmount += itemTotal;
+
+    console.log('🍔 CART ITEM:', {
+      foodId: food.id,
+      foodName: food.name,
+      vendorId: food.vendorId,
+      quantity: item.quantity,
+      price,
+      itemTotal,
     });
-    console.log('Vendor found:', vendor);
 
-    if (!vendor) {
-      throw new BadRequestException('Vendor not found');
+    return {
+      foodId: food.id,
+      quantity: item.quantity,
+      price: food.price,
+    };
+  });
+
+  console.log('💰 TOTAL:', totalAmount);
+
+  // ============================================================
+  // 🔒 TRANSACTION
+  // ============================================================
+
+  return this.prisma.$transaction(async (tx) => {
+    // ----------------------------------------------------------
+    // LOCK CUSTOMER WALLET
+    // ----------------------------------------------------------
+
+    const rows: any[] = await tx.$queryRawUnsafe(
+      `SELECT * FROM "Wallet" WHERE id = $1 FOR UPDATE`,
+      userWallet.id,
+    );
+
+    const wallet = rows[0];
+
+    if (!wallet) {
+      throw new BadRequestException(
+        'User wallet not found',
+      );
     }
 
-    const vendorWallet = await this.prisma.wallet.findUnique({
-      where: { vendorId: vendor.id },
+    const walletBalance = Number(wallet.balance);
+
+    console.log('🔒 Wallet locked');
+    console.log('💰 Balance:', walletBalance);
+    console.log('💰 Required:', totalAmount);
+
+    if (walletBalance < totalAmount) {
+      throw new ForbiddenException(
+        `Insufficient balance. Available: ₦${walletBalance}, Required: ₦${totalAmount}`,
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CREATE REFERENCE
+    // ----------------------------------------------------------
+
+    const reference = `ORD-${userId}-${Date.now()}`;
+
+    // ----------------------------------------------------------
+    // DEBIT CUSTOMER WALLET
+    // ----------------------------------------------------------
+
+    await tx.wallet.update({
+      where: {
+        id: userWallet.id,
+      },
+      data: {
+        balance: {
+          decrement: totalAmount,
+        },
+      },
     });
 
-    if (!vendorWallet) {
-      throw new BadRequestException('Vendor wallet not found');
-    }
+    console.log('✅ Customer wallet debited');
 
-    const userWallet = await this.prisma.wallet.findFirst({
-      where: { userId },
+    // ----------------------------------------------------------
+    // CREATE ORDER
+    // ----------------------------------------------------------
+
+    const order = await tx.order.create({
+      data: {
+        userId,
+        vendorId,
+        amount: totalAmount,
+        reference,
+        acceptBy: new Date(
+          Date.now() + 15 * 60 * 1000,
+        ),
+      },
     });
 
-    if (!userWallet) {
-      throw new BadRequestException('User wallet not found');
-    }
+    console.log('✅ Order created:', order.id);
 
-    if (!vendorWallet) {
-      throw new BadRequestException('Vendor wallet not found');
-    }
+    // ----------------------------------------------------------
+    // CREATE ORDER ITEMS
+    // ----------------------------------------------------------
 
-    // 🔥 Fetch foods
-    const foodIds = items.map((i) => i.foodId);
-
-    const foods = await this.prisma.food.findMany({
-      where: { id: { in: foodIds } },
-    });
-
-    if (foods.length !== items.length) {
-      throw new BadRequestException('Some foods not found');
-    }
-
-    // 🚨 VERY IMPORTANT: ensure foods belong to vendor
-    const invalidFood = foods.find((f) => f.vendorId !== vendorId);
-    if (invalidFood) {
-      throw new BadRequestException('Some items do not belong to this vendor');
-    }
-
-    // 💰 Calculate total
-    let totalAmount = 0;
-
-    const orderItemsData = items.map((item) => {
-      const food = foods.find((f) => f.id === item.foodId)!;
-
-      const itemTotal = food.price * item.quantity;
-      totalAmount += itemTotal;
-
-      return {
+    await tx.orderItem.createMany({
+      data: orderItemsData.map((item) => ({
+        orderId: order.id,
         foodId: item.foodId,
         quantity: item.quantity,
-        price: food.price,
-      };
+        price: item.price,
+      })),
     });
 
-    return this.prisma.$transaction(async (tx) => {
-      // 🔒 Lock wallet
-      const rows: any = await tx.$queryRawUnsafe(
-        `SELECT * FROM "Wallet" WHERE id = $1 FOR UPDATE`,
-        userWallet.id,
-      );
+    console.log('✅ Order items created');
 
-      const wallet = rows[0];
+    // ----------------------------------------------------------
+    // CREATE ESCROW
+    // ----------------------------------------------------------
 
-      if (!wallet || wallet.balance < totalAmount) {
-        throw new ForbiddenException('Insufficient balance');
-      }
-
-      const reference = `ORD-${userId}-${Date.now()}`;
-
-      // 💰 Deduct user balance
-      await tx.wallet.update({
-        where: { id: userWallet.id },
-        data: { balance: { decrement: totalAmount } },
-      });
-
-      // 🧾 Create order
-      const order = await tx.order.create({
-        data: {
-          userId,
-          vendorId,
-          amount: totalAmount,
-          reference,
-          acceptBy: new Date(Date.now() + 15 * 60 * 1000),
-        },
-      });
-
-      // 🍔 Create order items
-      await tx.orderItem.createMany({
-        data: orderItemsData.map((item) => ({
-          ...item,
-          orderId: order.id,
-        })),
-      });
-
-      // 🔒 Create escrow
-      await tx.escrow.create({
-        data: {
-          orderId: order.id,
-          amount: totalAmount,
-          walletId: userWallet.id,
-          vendorWalletId: vendorWallet.id,
-          status: 'HELD',
-          reference: `ESCROW-${order.id}`, // ✅ REQUIRED
-        },
-      });
-
-      return order;
+    const escrow = await tx.escrow.create({
+      data: {
+        orderId: order.id,
+        amount: totalAmount,
+        walletId: userWallet.id,
+        vendorWalletId: vendorWallet.id,
+        status: 'HELD',
+        reference: `ESCROW-${order.id}`,
+      },
     });
-  }
+
+    console.log('🔐 Escrow created:', escrow.id);
+
+    // ----------------------------------------------------------
+    // CLEAR CART
+    // ----------------------------------------------------------
+
+    await tx.cartItem.deleteMany({
+      where: {
+        cartId: cart.id,
+      },
+    });
+
+    await tx.cart.update({
+      where: {
+        id: cart.id,
+      },
+      data: {
+        vendorId: null,
+      },
+    });
+
+    console.log('🧹 Cart cleared');
+
+    console.log('========================================');
+    console.log('🎉 ORDER CREATED SUCCESSFULLY');
+    console.log('========================================');
+
+    return order;
+  });
+}
 
   /* ============================
      GET ORDER (WITH ITEMS)

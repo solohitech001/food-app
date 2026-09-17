@@ -16,12 +16,21 @@ export class WalletService {
   /* ============================
      CREATE USER WALLET
   ============================ */
-  async createUserWallet(userId: string) {
+
+  async createUserWallet(
+    userId: string,
+    kyc: {
+      bvn?: string;
+      nin?: string;
+    },
+  ) {
     const existing = await this.prisma.wallet.findUnique({
       where: { userId },
     });
 
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -31,12 +40,27 @@ export class WalletService {
       throw new BadRequestException('User email is required');
     }
 
+    if (!user.firstName || !user.lastName) {
+      throw new BadRequestException('First name and last name are required');
+    }
+
+    if (!kyc.bvn && !kyc.nin) {
+      throw new BadRequestException(
+        'BVN or NIN is required to create a virtual account',
+      );
+    }
+
     const reference = `PLATTER-${userId}-${Date.now()}`;
 
-    const flwAccount = await this.flutterwave.createVirtualAccount(
-      user.email,
+    const flwAccount = await this.flutterwave.createVirtualAccount({
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phoneNumber: user.phoneNumber ?? undefined,
+      bvn: kyc.bvn,
+      nin: kyc.nin,
       reference,
-    );
+    });
 
     return this.prisma.wallet.create({
       data: {
@@ -52,12 +76,20 @@ export class WalletService {
   /* ============================
      CREATE VENDOR WALLET
   ============================ */
-  async createVendorWallet(vendorId: string) {
+  async createVendorWallet(
+    vendorId: string,
+    kyc: {
+      bvn?: string;
+      nin?: string;
+    },
+  ) {
     const existing = await this.prisma.wallet.findUnique({
       where: { vendorId },
     });
 
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
 
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
@@ -68,12 +100,29 @@ export class WalletService {
       throw new BadRequestException('Vendor email is required');
     }
 
+    if (!vendor.user.firstName || !vendor.user.lastName) {
+      throw new BadRequestException(
+        'Vendor first name and last name are required',
+      );
+    }
+
+    if (!kyc.bvn && !kyc.nin) {
+      throw new BadRequestException(
+        'BVN or NIN is required   create a virtual account',
+      );
+    }
+
     const reference = `PLATTER-VENDOR-${vendorId}-${Date.now()}`;
 
-    const flwAccount = await this.flutterwave.createVirtualAccount(
-      vendor.user.email,
+    const flwAccount = await this.flutterwave.createVirtualAccount({
+      email: vendor.user.email,
+      firstName: vendor.user.firstName,
+      lastName: vendor.user.lastName,
+      phoneNumber: vendor.user.phoneNumber ?? undefined,
+      bvn: kyc.bvn,
+      nin: kyc.nin,
       reference,
-    );
+    });
 
     return this.prisma.wallet.create({
       data: {
@@ -360,7 +409,7 @@ export class WalletService {
     reference: string,
   ) {
     const wallet = await this.prisma.wallet.findUnique({
-      where: { virtualAccountNumber : accountNumber },
+      where: { virtualAccountNumber: accountNumber },
     });
 
     if (!wallet) {

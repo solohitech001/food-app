@@ -12,7 +12,6 @@ import { OrdersService } from './order-items.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 import {
-  CreateOrderWithItemsDto,
   EmptyOrderActionDto,
 } from './dto/create-order-with-items.dto';
 
@@ -25,65 +24,37 @@ import {
 @ApiTags('Order Items')
 @Controller('order-items')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+  ) {}
 
   /* ==========================================================================
-     CREATE ORDER (USER)
+     CREATE ORDER FROM CART (USER)
      ========================================================================== */
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  @ApiOperation({ summary: 'Create a new order with items' })
+  @ApiOperation({
+    summary: 'Create a new order from the authenticated user cart',
+  })
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['vendorId', 'items'],
-      properties: {
-        vendorId: {
-          type: 'string',
-          example: 'vendor_clx789abc',
-          description: 'The unique database ID of the vendor/restaurant',
-        },
-
-        items: {
-          type: 'array',
-          description: 'List of food items included in this checkout order',
-          items: {
-            type: 'object',
-            required: ['foodId', 'quantity'],
-            properties: {
-              foodId: {
-                type: 'string',
-                example: 'food_clx987xyz',
-                description:
-                  'The unique database ID of the specific food item',
-              },
-
-              quantity: {
-                type: 'number',
-                example: 2,
-                description:
-                  'The total units ordered for this specific item',
-              },
-            },
-          },
-        },
-      },
+      properties: {},
+      description:
+        'No request body is required. The authenticated user cart is used automatically.',
     },
   })
-  createOrder(
-    @Req() req: any,
-    @Body() dto: CreateOrderWithItemsDto,
-  ) {
-    console.log('Received order creation request:', {
-      user: req.user,
-      userId: req.user.id,
-      dto,
-    });
+  createOrder(@Req() req: any) {
+    console.log('========================================');
+    console.log('🛒 CREATE ORDER REQUEST');
+    console.log('========================================');
+
+    console.log('👤 Authenticated user:', req.user);
+    console.log('👤 User ID:', req.user.id);
 
     return this.ordersService.createOrder(
       req.user.id,
-      dto,
     );
   }
 
@@ -93,7 +64,9 @@ export class OrdersController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  @ApiOperation({ summary: 'Get order details with items' })
+  @ApiOperation({
+    summary: 'Get order details with items',
+  })
   getOrder(@Param('id') id: string) {
     return this.ordersService.getOrderById(id);
   }
@@ -104,7 +77,9 @@ export class OrdersController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/accept')
-  @ApiOperation({ summary: 'Vendor accepts an order' })
+  @ApiOperation({
+    summary: 'Vendor accepts an order',
+  })
   @ApiBody({
     type: EmptyOrderActionDto,
     description:
@@ -115,11 +90,13 @@ export class OrdersController {
     @Req() req: any,
     @Body() body: EmptyOrderActionDto,
   ) {
-    console.log('Accept order:', {
-      orderId: id,
-      user: req.user,
-      userId: req.user.id,
-    });
+    console.log('========================================');
+    console.log('✅ ACCEPT ORDER');
+    console.log('========================================');
+
+    console.log('Order ID:', id);
+    console.log('User:', req.user);
+    console.log('User ID:', req.user.id);
 
     return this.ordersService.acceptOrder(
       id,
@@ -133,7 +110,9 @@ export class OrdersController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/deliver')
-  @ApiOperation({ summary: 'Vendor marks order as delivered' })
+  @ApiOperation({
+    summary: 'Vendor marks order as delivered',
+  })
   @ApiBody({
     type: EmptyOrderActionDto,
     description:
@@ -144,11 +123,13 @@ export class OrdersController {
     @Req() req: any,
     @Body() body: EmptyOrderActionDto,
   ) {
-    console.log('Deliver order:', {
-      orderId: id,
-      user: req.user,
-      userId: req.user.id,
-    });
+    console.log('========================================');
+    console.log('🚚 MARK ORDER AS DELIVERED');
+    console.log('========================================');
+
+    console.log('Order ID:', id);
+    console.log('User:', req.user);
+    console.log('User ID:', req.user.id);
 
     return this.ordersService.markAsDelivered(
       id,
@@ -163,7 +144,8 @@ export class OrdersController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/complete')
   @ApiOperation({
-    summary: 'User marks order as complete (Releases escrow)',
+    summary:
+      'User marks order as complete (Releases escrow)',
   })
   @ApiBody({
     type: EmptyOrderActionDto,
@@ -175,11 +157,13 @@ export class OrdersController {
     @Req() req: any,
     @Body() body: EmptyOrderActionDto,
   ) {
-    console.log('Complete order:', {
-      orderId: id,
-      user: req.user,
-      userId: req.user.id,
-    });
+    console.log('========================================');
+    console.log('💰 COMPLETE ORDER');
+    console.log('========================================');
+
+    console.log('Order ID:', id);
+    console.log('User:', req.user);
+    console.log('User ID:', req.user.id);
 
     return this.ordersService.completeOrder(
       id,
@@ -194,7 +178,8 @@ export class OrdersController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/reject')
   @ApiOperation({
-    summary: 'Vendor rejects an order (Triggers wallet refund)',
+    summary:
+      'Vendor rejects an order (Triggers wallet refund)',
   })
   @ApiBody({
     type: EmptyOrderActionDto,
@@ -206,11 +191,13 @@ export class OrdersController {
     @Req() req: any,
     @Body() body: EmptyOrderActionDto,
   ) {
-    console.log('Reject order:', {
-      orderId: id,
-      user: req.user,
-      userId: req.user.id,
-    });
+    console.log('========================================');
+    console.log('❌ REJECT ORDER');
+    console.log('========================================');
+
+    console.log('Order ID:', id);
+    console.log('User:', req.user);
+    console.log('User ID:', req.user.id);
 
     return this.ordersService.rejectOrder(
       id,

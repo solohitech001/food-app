@@ -12,21 +12,35 @@ export class FlutterwaveService {
   private readonly baseUrl = 'https://api.flutterwave.com/v3';
   private readonly secretKey =
     'FLWSECK-b09e764b7e44a276b65c07440f0a3b94-19d8e5acc14vt-X';
-  private readonly secretHash = 'http://localhost:3000/flutterwave/webhook';
+  private readonly secretHash = process.env.FLW_SECRET_HASH;
 
   /* ============================
      CREATE VIRTUAL ACCOUNT
   ============================ */
-  async createVirtualAccount(email: string, reference: string) {
+  async createVirtualAccount(data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber?: string;
+    bvn?: string;
+    nin?: string;
+    reference: string;
+  }) {
     try {
       const res = await axios.post(
         `${this.baseUrl}/virtual-account-numbers`,
         {
-          email,
-          is_permanent: false,
-          tx_ref: reference,
-          narration: 'Platter Wallet',
-          amount: 1,
+          email: data.email,
+          firstname: data.firstName,
+          lastname: data.lastName,
+          phonenumber: data.phoneNumber,
+          currency: 'NGN',
+          is_permanent: true,
+          tx_ref: data.reference,
+          narration: `${data.firstName} ${data.lastName}`,
+          amount: 0,
+          ...(data.bvn ? { bvn: data.bvn } : {}),
+          ...(data.nin ? { nin: data.nin } : {}),
         },
         {
           headers: {
@@ -38,7 +52,10 @@ export class FlutterwaveService {
 
       return res.data.data;
     } catch (error: any) {
-      console.error(error.response?.data || error.message);
+      console.error(
+        'Flutterwave virtual account error:',
+        error.response?.data || error.message,
+      );
 
       throw new InternalServerErrorException(
         error.response?.data?.message || 'Flutterwave API failed',
@@ -109,5 +126,4 @@ export class FlutterwaveService {
       throw new Error('Transfer failed');
     }
   }
-
 }

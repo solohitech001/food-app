@@ -7,8 +7,10 @@ import {
   Headers,
   Body,
 } from '@nestjs/common';
+
 import { FlutterwaveService } from './flutterwave.service';
 import { WalletService } from '../wallet/wallet.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('flutterwave')
@@ -16,6 +18,7 @@ export class FlutterwaveController {
   constructor(
     private readonly flutterwaveService: FlutterwaveService,
     private readonly walletService: WalletService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -26,34 +29,71 @@ export class FlutterwaveController {
    */
   @UseGuards(JwtAuthGuard)
   @Post('virtual-account')
-  async createVirtualAccount(@Req() req) {
-    const user = req.user;
+  async createVirtualAccount(
+    @Req() req: any,
+    @Body()
+    body: {
+      bvn?: string;
+      nin?: string;
+    },
+  ) {
+    const userId = req.user?.id;
 
-    if (!user?.id) {
+    if (!userId) {
       throw new BadRequestException('Invalid user');
     }
 
-    // 🔒 Prevent duplicate wallet creation
-    const existingWallet = await this.walletService.findByUserId(user.id);
+    // Get the complete user from the database
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (!user.email) {
+      throw new BadRequestException('User email is required');
+    }
+
+    if (!user.firstName || !user.lastName) {
+      throw new BadRequestException(
+        'First name and last name are required',
+      );
+    }
+
+    if (!body.bvn && !body.nin) {
+      throw new BadRequestException(
+        'BVN or NIN is required to create a virtual account',
+      );
+    }
+
+    // Prevent duplicate wallet creation
+    const existingWallet = await this.walletService.findByUserId(userId);
+
     if (existingWallet) {
       return existingWallet;
     }
 
-    const email =
-      user.email ?? `${user.phoneNumber}@platter.app`;
+    const reference = `PLATTER-${userId}-${Date.now()}`;
 
-    const reference = `PLATTER-${user.id}-${Date.now()}`;
-
-    // 🔥 Call Flutterwave API
+    // Create permanent Flutterwave virtual account
     const account =
-      await this.flutterwaveService.createVirtualAccount(
-        email,
+      await this.flutterwaveService.createVirtualAccount({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber ?? undefined,
+        bvn: body.bvn,
+        nin: body.nin,
         reference,
-      );
+      });
 
-    // 💾 Persist wallet
+    // Persist wallet
     return this.walletService.create({
-      userId: user.id,
+      userId,
       virtualAccountNumber: account.account_number,
       virtualBankName: account.bank_name,
       flutterwaveRef: reference,
@@ -71,18 +111,20 @@ export class FlutterwaveController {
     @Headers('verif-hash') signature: string,
     @Body() payload: any,
   ) {
-    // 🔐 Verify webhook
+    // Verify webhook signature
     if (!this.flutterwaveService.verifySignature(signature)) {
       throw new BadRequestException('Invalid webhook signature');
     }
 
-    const data = this.flutterwaveService.extractFundingData(payload);
+    const data =
+      this.flutterwaveService.extractFundingData(payload);
 
     if (!data) {
-      return { status: 'ignored' };
+      return {
+        status: 'ignored',
+      };
     }
 
-    // ✅ FIXED HERE (PROPER METHOD)
     await this.walletService.handleFlutterwaveWebhook({
       reference: data.reference,
       accountNumber: data.accountNumber,
@@ -90,6 +132,8 @@ export class FlutterwaveController {
       currency: 'NGN',
     });
 
-    return { status: 'success' };
+    return {
+      status: 'success',
+    };
   }
 }
