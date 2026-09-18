@@ -331,38 +331,54 @@ export class WalletService {
   /* ============================
      FLUTTERWAVE WEBHOOK CREDIT
   ============================ */
+  /* ============================
+   FLUTTERWAVE WEBHOOK CREDIT
+============================ */
   async handleFlutterwaveWebhook(payload: {
     reference: string;
-    accountNumber: string;
     amount: number;
     currency: string;
   }) {
-    const { reference, accountNumber, amount, currency } = payload;
+    const { reference, amount, currency } = payload;
 
     if (currency !== 'NGN') {
       throw new BadRequestException('Invalid currency');
     }
 
+    // Prevent the same webhook from crediting the wallet twice
     const exists = await this.prisma.webhookEvent.findUnique({
       where: { reference },
     });
 
-    if (exists) return { duplicate: true };
+    if (exists) {
+      return { duplicate: true };
+    }
 
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { virtualAccountNumber: accountNumber },
+    // Find wallet using Flutterwave tx_ref
+    const wallet = await this.prisma.wallet.findFirst({
+      where: {
+        flutterwaveRef: reference,
+      },
     });
 
     if (!wallet) {
-      throw new BadRequestException('Wallet not found');
+      throw new BadRequestException(
+        `Wallet not found for Flutterwave reference: ${reference}`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Credit wallet
       await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { increment: amount } },
+        data: {
+          balance: {
+            increment: amount,
+          },
+        },
       });
 
+      // Record transaction
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
@@ -374,6 +390,7 @@ export class WalletService {
         },
       });
 
+      // Record webhook so it cannot be processed twice
       await tx.webhookEvent.create({
         data: {
           reference,
@@ -381,7 +398,11 @@ export class WalletService {
         },
       });
 
-      return { credited: true };
+      return {
+        credited: true,
+        walletId: wallet.id,
+        amount,
+      };
     });
   }
 
@@ -446,14 +467,9 @@ export class WalletService {
     });
   }
 
-  async creditWalletFromFlutterwave(
-    accountNumber: string,
-    amount: number,
-    reference: string,
-  ) {
+  async creditWalletFromFlutterwave(amount: number, reference: string) {
     return this.handleFlutterwaveWebhook({
       reference,
-      accountNumber,
       amount,
       currency: 'NGN',
     });

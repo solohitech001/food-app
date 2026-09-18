@@ -94,7 +94,7 @@ export class WalletController {
   }
 
   /* ============================
-     TRANSFER TO VENDOR
+     TRANSFER USER → VENDOR
   ============================ */
   @Post('transfer')
   async transfer(
@@ -150,7 +150,7 @@ export class WalletController {
   }
 
   /* ============================
-     ADMIN / DEBUG
+     GET WALLET BY ID
   ============================ */
   @Get(':walletId')
   async getWalletById(

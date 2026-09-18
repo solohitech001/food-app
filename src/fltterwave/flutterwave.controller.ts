@@ -22,10 +22,7 @@ export class FlutterwaveController {
   ) {}
 
   /**
-   * =====================================
-   * CREATE VIRTUAL ACCOUNT
-   * =====================================
-   * POST /flutterwave/virtual-account
+   * Create Flutterwave virtual account for a user
    */
   @UseGuards(JwtAuthGuard)
   @Post('virtual-account')
@@ -43,11 +40,8 @@ export class FlutterwaveController {
       throw new BadRequestException('Invalid user');
     }
 
-    // Get the complete user from the database
     const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+      where: { id: userId },
     });
 
     if (!user) {
@@ -59,7 +53,9 @@ export class FlutterwaveController {
     }
 
     if (!user.firstName || !user.lastName) {
-      throw new BadRequestException('First name and last name are required');
+      throw new BadRequestException(
+        'First name and last name are required',
+      );
     }
 
     if (!body.bvn && !body.nin) {
@@ -68,27 +64,28 @@ export class FlutterwaveController {
       );
     }
 
-    // Prevent duplicate wallet creation
+    // Check if the user already has a wallet
     const existingWallet = await this.walletService.findByUserId(userId);
 
     if (existingWallet) {
       return existingWallet;
     }
 
+    // This same reference is sent to Flutterwave as tx_ref
+    // and stored in the wallet as flutterwaveRef.
     const reference = `PLATTER-${userId}-${Date.now()}`;
 
-    // Create permanent Flutterwave virtual account
-    const account = await this.flutterwaveService.createVirtualAccount({
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phoneNumber: user.phoneNumber ?? undefined,
-      bvn: body.bvn,
-      nin: body.nin,
-      reference,
-    });
+    const account =
+      await this.flutterwaveService.createVirtualAccount({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber ?? undefined,
+        bvn: body.bvn,
+        nin: body.nin,
+        reference,
+      });
 
-    // Persist wallet
     return this.walletService.create({
       userId,
       virtualAccountNumber: account.account_number,
@@ -98,72 +95,54 @@ export class FlutterwaveController {
   }
 
   /**
-   * =====================================
-   * FLUTTERWAVE WEBHOOK
-   * =====================================
-   * POST /flutterwave/webhook
+   * Flutterwave webhook
+   *
+   * Flutterwave sends the transaction reference as:
+   * payload.data.tx_ref
+   *
+   * We use tx_ref to find the user's wallet.
    */
-  // @Post('webhook')
-  // async handleWebhook(
-  //   @Headers('verif-hash') signature: string,
-  //   @Body() payload: any,
-  // ) {
-
-  //   // Verify webhook signature
-  //   if (!this.flutterwaveService.verifySignature(signature)) {
-  //     throw new BadRequestException('Invalid webhook signature');
-  //   }
-
-  //   const data =
-  //     this.flutterwaveService.extractFundingData(payload);
-
-  //   if (!data) {
-  //     return {
-  //       status: 'ignored',
-  //     };
-  //   }
-
-  //   await this.walletService.handleFlutterwaveWebhook({
-  //     reference: data.reference,
-  //     accountNumber: data.accountNumber,
-  //     amount: data.amount,
-  //     currency: 'NGN',
-  //   });
-
-  //   return {
-  //     status: 'success',
-  //   };
-  // }
-
   @Post('webhook')
   async handleWebhook(
     @Headers('verif-hash') signature: string,
     @Body() payload: any,
   ) {
-    // Verify webhook signature
+    // Verify Flutterwave webhook signature
     if (!this.flutterwaveService.verifySignature(signature)) {
       throw new BadRequestException('Invalid webhook signature');
     }
 
-    console.log('🔥 FLUTTERWAVE PAYLOAD:', JSON.stringify(payload, null, 2));
+    console.log(
+      '🔥 FLUTTERWAVE PAYLOAD:',
+      JSON.stringify(payload, null, 2),
+    );
 
-    const data = this.flutterwaveService.extractFundingData(payload);
+    // Extract tx_ref and amount
+    const data =
+      this.flutterwaveService.extractFundingData(payload);
 
+    // Ignore events that are not wallet funding transactions
     if (!data) {
       return {
         status: 'ignored',
       };
     }
 
-    await this.walletService.handleFlutterwaveWebhook({
-      reference: data.reference,
-      accountNumber: data.accountNumber,
-      amount: data.amount,
-      currency: 'NGN',
-    });
+    console.log('💰 Flutterwave funding data:', data);
+
+    // Credit wallet using Flutterwave tx_ref
+    const result =
+      await this.walletService.handleFlutterwaveWebhook({
+        reference: data.reference,
+        amount: data.amount,
+        currency: 'NGN',
+      });
+
+    console.log('✅ Wallet funding result:', result);
 
     return {
       status: 'success',
+      ...result,
     };
   }
 }
