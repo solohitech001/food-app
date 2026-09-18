@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
@@ -11,77 +15,85 @@ export class UsersService {
   /* ============================
      GET CURRENT USER PROFILE
   ============================ */
-async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
-  const user = await this.prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      wallet: true, // ✅ include wallet
-      vendor: {
-        include: {
-          vendorDocuments: true,
+  async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        wallet: true, // ✅ include wallet
+        vendor: {
+          include: {
+            vendorDocuments: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!user) throw new BadRequestException('User not found');
+    if (!user) throw new BadRequestException('User not found');
 
-  // Transform vendor documents
-  const documents = user.vendor?.vendorDocuments.map(doc => ({
-    id: doc.id,
-    type: doc.type,
-    fileUrl: doc.fileUrl,
-    status: doc.status,
-    comment: doc.comment,
-    createdAt: doc.createdAt,
-  })) || [];
+    // Transform vendor documents
+    const documents =
+      user.vendor?.vendorDocuments.map((doc) => ({
+        id: doc.id,
+        type: doc.type,
+        fileUrl: doc.fileUrl,
+        status: doc.status,
+        comment: doc.comment,
+        createdAt: doc.createdAt,
+      })) || [];
 
-  return {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    isVerified: user.isVerified,
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified,
 
-    // ✅ WALLET (ACCOUNT NUMBER)
-    wallet: user.wallet
-  ? {
-      accountNumber: user.wallet.virtualAccountNumber,
-      bankName: user.wallet.virtualBankName,
-      balance: user.wallet.balance, 
-    }
-  : null,
+      // ✅ WALLET (ACCOUNT NUMBER)
+      wallet: user.wallet
+        ? {
+            accountNumber: user.wallet.virtualAccountNumber,
+            bankName: user.wallet.virtualBankName,
+            balance: user.wallet.balance,
+          }
+        : null,
 
-    // ✅ VENDOR
-    vendor: user.vendor
-      ? {
-          id: user.vendor.id,
-          name: user.vendor.name,
-          status: user.vendor.status,
-          level: user.vendor.level,
-          location: {
-            city: user.vendor.city,
-            state: user.vendor.state,
-            latitude: user.vendor.latitude,
-            longitude: user.vendor.longitude,
-          },
-        }
-      : null,
+      // ✅ VENDOR
+      vendor: user.vendor
+        ? {
+            id: user.vendor.id,
+            name: user.vendor.name,
+            status: user.vendor.status,
+            level: user.vendor.level,
+            location: {
+              city: user.vendor.city,
+              state: user.vendor.state,
+              latitude: user.vendor.latitude,
+              longitude: user.vendor.longitude,
+            },
+          }
+        : null,
 
-    // ✅ DOCUMENTS
-    documents,
-  };
-}
+      // ✅ DOCUMENTS
+      documents,
+    };
+  }
 
   /* ============================
      UPDATE CURRENT USER PROFILE
   ============================ */
   async updateProfile(userId: string, dto: UpdateUserProfileDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new BadRequestException('User not found');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
 
     return this.prisma.user.update({
       where: { id: userId },
-      data: { ...dto },
+      data: {
+        ...dto,
+      },
     });
   }
 
@@ -110,7 +122,7 @@ async getMyProfile(userId: string): Promise<UserProfileResponseDto> {
     return user;
   }
 
-    /* ============================
+  /* ============================
      UPDATE USER ROLE (ADMIN)
   ============================ */
   async updateUserRole(userId: string, role: Role) {

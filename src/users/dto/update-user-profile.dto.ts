@@ -1,4 +1,3 @@
-
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsOptional,
@@ -6,6 +5,9 @@ import {
   IsEmail,
   IsPhoneNumber,
   IsUrl,
+  IsNumber,
+  Min,
+  Max,
 } from 'class-validator';
 
 export class UpdateUserProfileDto {
@@ -72,5 +74,24 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsString()
   state?: string;
-}
 
+  @ApiPropertyOptional({
+    description: 'Latitude of the user location',
+    example: 9.0765,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Longitude of the user location',
+    example: 7.3986,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+}

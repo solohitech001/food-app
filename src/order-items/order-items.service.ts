@@ -12,7 +12,7 @@ export class OrdersService  {
   constructor(private prisma: PrismaService) {}
 
   /* ============================
-     CREATE ORDER + ITEMS  + ESCROW
+     CREATE ORDER + ITEMS   + ESCROW
   ============================ */
 async createOrder(userId: string) {
   console.log('========================================');
