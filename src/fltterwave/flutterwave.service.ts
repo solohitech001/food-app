@@ -74,18 +74,28 @@ export class FlutterwaveService {
      EXTRACT FUNDING DATA
      (Used by Webhook Controller)
   ============================ */
-  extractFundingData(payload: any) {
+  extractFundingData(payload: any): {
+    walletReference: string;
+    transactionReference: string;
+    amount: number;
+  } | null {
     const data = payload?.data;
 
     if (!data) {
       return null;
     }
 
-    const reference = data.tx_ref;
+    const walletReference = data.tx_ref;
+    const transactionReference = data.flw_ref;
     const amount = Number(data.amount);
 
-    if (!reference) {
+    if (!walletReference) {
       console.log('⚠️ Flutterwave webhook has no tx_ref');
+      return null;
+    }
+
+    if (!transactionReference) {
+      console.log('⚠️ Flutterwave webhook has no flw_ref');
       return null;
     }
 
@@ -95,7 +105,8 @@ export class FlutterwaveService {
     }
 
     return {
-      reference,
+      walletReference,
+      transactionReference,
       amount,
     };
   }

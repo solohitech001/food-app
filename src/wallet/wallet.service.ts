@@ -334,43 +334,81 @@ export class WalletService {
   /* ============================
    FLUTTERWAVE WEBHOOK CREDIT
 ============================ */
+
   async handleFlutterwaveWebhook(payload: {
-    reference: string;
+    walletReference: string;
+    transactionReference: string;
     amount: number;
     currency: string;
   }) {
-    const { reference, amount, currency } = payload;
+    const { walletReference, transactionReference, amount, currency } = payload;
 
     if (currency !== 'NGN') {
       throw new BadRequestException('Invalid currency');
     }
 
-    // Prevent the same webhook from crediting the wallet twice
-    const exists = await this.prisma.webhookEvent.findUnique({
-      where: { reference },
-    });
-
-    if (exists) {
-      return { duplicate: true };
+    if (!walletReference) {
+      throw new BadRequestException('Flutterwave wallet reference is missing');
     }
 
-    // Find wallet using Flutterwave tx_ref
+    if (!transactionReference) {
+      throw new BadRequestException(
+        'Flutterwave transaction reference is missing',
+      );
+    }
+
+    if (!amount || amount <= 0) {
+      throw new BadRequestException('Invalid Flutterwave transaction amount');
+    }
+
+    // Find wallet using tx_ref
     const wallet = await this.prisma.wallet.findFirst({
       where: {
-        flutterwaveRef: reference,
+        flutterwaveRef: walletReference,
       },
     });
 
     if (!wallet) {
       throw new BadRequestException(
-        `Wallet not found for Flutterwave reference: ${reference}`,
+        `Wallet not found for Flutterwave reference: ${walletReference}`,
       );
     }
 
+    // Prevent the same individual Flutterwave payment
+    // from crediting the wallet twice.
+    const exists = await this.prisma.webhookEvent.findUnique({
+      where: {
+        reference: transactionReference,
+      },
+    });
+
+    if (exists) {
+      return {
+        duplicate: true,
+        message: 'Flutterwave transaction already processed',
+      };
+    }
+
     return this.prisma.$transaction(async (tx) => {
+      // Double-check inside the transaction
+      const existingTransaction = await tx.transaction.findUnique({
+        where: {
+          reference: transactionReference,
+        },
+      });
+
+      if (existingTransaction) {
+        return {
+          duplicate: true,
+          message: 'Flutterwave transaction already processed',
+        };
+      }
+
       // Credit wallet
-      await tx.wallet.update({
-        where: { id: wallet.id },
+      const updatedWallet = await tx.wallet.update({
+        where: {
+          id: wallet.id,
+        },
         data: {
           balance: {
             increment: amount,
@@ -378,23 +416,25 @@ export class WalletService {
         },
       });
 
-      // Record transaction
+      // Record individual Flutterwave transaction
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
           amount,
           type: 'CREDIT',
           source: 'FLUTTERWAVE',
-          reference,
+          reference: transactionReference,
           narration: 'Wallet funding via Flutterwave',
+          balanceAfter: updatedWallet.balance,
         },
       });
 
-      // Record webhook so it cannot be processed twice
+      // Record webhook/payment reference
       await tx.webhookEvent.create({
         data: {
-          reference,
+          reference: transactionReference,
           source: 'FLUTTERWAVE',
+          status: 'PROCESSED',
         },
       });
 
@@ -402,6 +442,8 @@ export class WalletService {
         credited: true,
         walletId: wallet.id,
         amount,
+        balance: updatedWallet.balance,
+        transactionReference,
       };
     });
   }
@@ -467,9 +509,14 @@ export class WalletService {
     });
   }
 
-  async creditWalletFromFlutterwave(amount: number, reference: string) {
+  async creditWalletFromFlutterwave(
+    walletReference: string,
+    transactionReference: string,
+    amount: number,
+  ) {
     return this.handleFlutterwaveWebhook({
-      reference,
+      walletReference,
+      transactionReference,
       amount,
       currency: 'NGN',
     });

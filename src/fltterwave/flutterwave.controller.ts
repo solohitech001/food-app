@@ -64,15 +64,14 @@ export class FlutterwaveController {
       );
     }
 
-    // Check if the user already has a wallet
-    const existingWallet = await this.walletService.findByUserId(userId);
+    const existingWallet =
+      await this.walletService.findByUserId(userId);
 
     if (existingWallet) {
       return existingWallet;
     }
 
-    // This same reference is sent to Flutterwave as tx_ref
-    // and stored in the wallet as flutterwaveRef.
+    // This becomes Flutterwave's tx_ref
     const reference = `PLATTER-${userId}-${Date.now()}`;
 
     const account =
@@ -97,10 +96,8 @@ export class FlutterwaveController {
   /**
    * Flutterwave webhook
    *
-   * Flutterwave sends the transaction reference as:
-   * payload.data.tx_ref
-   *
-   * We use tx_ref to find the user's wallet.
+   * tx_ref  -> identifies the user's wallet
+   * flw_ref -> identifies the individual payment
    */
   @Post('webhook')
   async handleWebhook(
@@ -109,7 +106,9 @@ export class FlutterwaveController {
   ) {
     // Verify Flutterwave webhook signature
     if (!this.flutterwaveService.verifySignature(signature)) {
-      throw new BadRequestException('Invalid webhook signature');
+      throw new BadRequestException(
+        'Invalid webhook signature',
+      );
     }
 
     console.log(
@@ -117,28 +116,61 @@ export class FlutterwaveController {
       JSON.stringify(payload, null, 2),
     );
 
-    // Extract tx_ref and amount
+    // Only process successful completed payments
+    if (
+      payload?.event !== 'charge.completed' ||
+      payload?.data?.status !== 'successful'
+    ) {
+      console.log(
+        '⚠️ Ignoring Flutterwave event:',
+        payload?.event,
+        payload?.data?.status,
+      );
+
+      return {
+        status: 'ignored',
+      };
+    }
+
+    // Extract tx_ref, flw_ref and amount
     const data =
       this.flutterwaveService.extractFundingData(payload);
 
-    // Ignore events that are not wallet funding transactions
     if (!data) {
       return {
         status: 'ignored',
       };
     }
 
-    console.log('💰 Flutterwave funding data:', data);
+    console.log(
+      '💰 Wallet Reference (tx_ref):',
+      data.walletReference,
+    );
 
-    // Credit wallet using Flutterwave tx_ref
+    console.log(
+      '💰 Transaction Reference (flw_ref):',
+      data.transactionReference,
+    );
+
+    console.log(
+      '💰 Funding Amount:',
+      data.amount,
+    );
+
+    // tx_ref     -> finds the wallet
+    // flw_ref    -> identifies this specific payment
     const result =
       await this.walletService.handleFlutterwaveWebhook({
-        reference: data.reference,
+        walletReference: data.walletReference,
+        transactionReference: data.transactionReference,
         amount: data.amount,
         currency: 'NGN',
       });
 
-    console.log('✅ Wallet funding result:', result);
+    console.log(
+      '✅ Wallet funding result:',
+      result,
+    );
 
     return {
       status: 'success',
