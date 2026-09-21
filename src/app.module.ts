@@ -20,6 +20,7 @@ import { AfricasTalkingModule } from './africastalking/africastalking.module';
 import { AfricastalkingVoiceService } from './africastalking-voice/africastalking-voice.service';
 import { OrderItemsModule } from './order-items/order-items.module';
 import { TransactionModule } from './transaction/transaction.module';
+import { WalletDepositModule } from './wallet-deposit/wallet-deposit.module';
 import { CartModule } from './cart/cart.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { CartModule } from './cart/cart.module';
     PrismaModule,
     LocationModule,
     WalletModule,
+    WalletDepositModule,
     FlutterwaveModule,
     UploadsModule,
     EscrowModule,

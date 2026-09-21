@@ -63,6 +63,60 @@ export class FlutterwaveService {
     }
   }
 
+  async initializePayment(data: {
+    amount: number;
+    currency: string;
+    txRef: string;
+    customer: {
+      email: string;
+      name?: string;
+      phoneNumber?: string;
+    };
+    redirectUrl: string;
+  }) {
+    try {
+      const res = await axios.post(
+        `${this.baseUrl}/payments`,
+        {
+          tx_ref: data.txRef,
+          amount: data.amount,
+          currency: data.currency,
+          redirect_url: data.redirectUrl,
+          customer: {
+            email: data.customer.email,
+            name: data.customer.name,
+            phonenumber: data.customer.phoneNumber,
+          },
+          customizations: {
+            title: 'Wallet Deposit',
+            description: 'Add money to your wallet',
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.secretKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      return {
+        link: res.data?.data?.link,
+        raw: res.data,
+      };
+    } catch (error: any) {
+      console.error(
+        'Flutterwave payment initialization error:',
+        error.response?.data || error.message,
+      );
+
+      throw new InternalServerErrorException(
+        error.response?.data?.message ||
+          'Unable to initialize Flutterwave payment',
+      );
+    }
+  }
+
   /* ============================
      VERIFY WEBHOOK SIGNATURE
   ============================ */

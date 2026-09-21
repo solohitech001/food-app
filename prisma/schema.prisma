@@ -8,31 +8,32 @@ datasource db {
 }
 
 model User {
-  id            String      @id @default(uuid())
-  email         String?     @unique
-  password      String?
-  firstName     String?
-  lastName      String?
-  role          Role        @default(CUSTOMER)
-  createdAt     DateTime    @default(now())
-  isVerified    Boolean     @default(false)
-  otpCode       String?
-  otpExpiresAt  DateTime?
-  phoneNumber   String?     @unique
-  city          String?
-  latitude      Float?
-  longitude     Float?
-  state         String?
-  lastOtpSentAt DateTime?
-  updatedAt     DateTime?   @updatedAt
-  foodLikes     FoodLike[]
-  foodSaves     FoodSave[]
-  foodShares    FoodShare[]
-  orders        Order[]
-  reviews       Review[]
-  vendor        Vendor?
-  wallet        Wallet?
-  cart          Cart?
+  id             String          @id @default(uuid())
+  email          String?         @unique
+  password       String?
+  role           Role            @default(CUSTOMER)
+  createdAt      DateTime        @default(now())
+  isVerified     Boolean         @default(false)
+  otpCode        String?
+  otpExpiresAt   DateTime?
+  phoneNumber    String?         @unique
+  city           String?
+  latitude       Float?
+  longitude      Float?
+  state          String?
+  lastOtpSentAt  DateTime?
+  updatedAt      DateTime?       @updatedAt
+  firstName      String?
+  lastName       String?
+  cart           Cart?
+  walletDeposits WalletDeposit[]
+  foodLikes      FoodLike[]
+  foodSaves      FoodSave[]
+  foodShares     FoodShare[]
+  orders         Order[]
+  reviews        Review[]
+  vendor         Vendor?
+  wallet         Wallet?
 }
 
 model Vendor {
@@ -67,6 +68,7 @@ model Vendor {
   twitter          String?
   updatedAt        DateTime?            @updatedAt
   website          String?
+  carts            Cart[]
   foods            Food[]
   orders           Order[]
   reviews          Review[]
@@ -76,7 +78,6 @@ model Vendor {
   notifications    VendorNotification[]
   deliveryZones    VendorZone[]
   wallet           Wallet?
-  carts            Cart[]
 
   @@index([status])
   @@index([city])
@@ -121,27 +122,25 @@ model VendorDocument {
 }
 
 model MealCategory {
-  id        String   @id @default(uuid())
-  name      String   @unique
+  id        String            @id @default(uuid())
+  name      String            @unique
   image     String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-
-  subTypes MealSubCategory[]
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  subTypes  MealSubCategory[]
 
   @@index([name])
   @@index([sortOrder])
 }
 
 model MealSubCategory {
-  id         String   @id @default(uuid())
+  id         String       @id @default(uuid())
   name       String
   categoryId String
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  category MealCategory @relation(fields: [categoryId], references: [id])
+  sortOrder  Int          @default(0)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  category   MealCategory @relation(fields: [categoryId], references: [id])
 
   @@unique([name, categoryId])
   @@index([categoryId])
@@ -149,33 +148,25 @@ model MealSubCategory {
 }
 
 model Food {
-  id       String @id @default(uuid())
-  name     String
-  price    Float
-  vendorId String
-
-  mealType MealType?
-
+  id              String           @id @default(uuid())
+  name            String
+  price           Float
+  vendorId        String
+  createdAt       DateTime         @default(now())
+  mediaUrl        String?
+  description     String?
+  imageUrl        String?
+  updatedAt       DateTime         @updatedAt
+  isAvailable     Boolean          @default(true)
+  stock           Int?
+  mealType        MealType?
   preparationType PreparationType?
-
-  description String?
-
-  imageUrl String?
-  mediaUrl String?
-
-  isAvailable Boolean @default(true)
-  stock       Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  vendor Vendor @relation(fields: [vendorId], references: [id])
-
-  likes      FoodLike[]
-  saves      FoodSave[]
-  shares     FoodShare[]
-  orderItems OrderItem[]
-  cartItems  CartItem[]
+  cartItems       CartItem[]
+  vendor          Vendor           @relation(fields: [vendorId], references: [id])
+  likes           FoodLike[]
+  saves           FoodSave[]
+  shares          FoodShare[]
+  orderItems      OrderItem[]
 
   @@index([vendorId])
   @@index([mealType])
@@ -232,6 +223,22 @@ model Wallet {
   user                 User?         @relation(fields: [userId], references: [id])
   vendor               Vendor?       @relation(fields: [vendorId], references: [id])
   withdrawals          Withdrawal[]
+}
+
+model WalletDeposit {
+  id            String        @id @default(uuid())
+  userId        String
+  amount        Decimal       @db.Decimal(15, 2)
+  currency      String        @default("NGN")
+  reference     String        @unique
+  flutterwaveId String?       @unique
+  status        DepositStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -302,15 +309,14 @@ model Order {
 }
 
 model Cart {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  vendorId  String? // Enforces single-vendor restriction per cart session
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vendor Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  items  CartItem[]
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  vendorId  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor    Vendor?    @relation(fields: [vendorId], references: [id])
+  items     CartItem[]
 
   @@index([userId])
 }
@@ -320,12 +326,11 @@ model CartItem {
   cartId    String
   foodId    String
   quantity  Int      @default(1)
-  price     Float // Price snapshot at the time of adding
+  price     Float
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  food      Food     @relation(fields: [foodId], references: [id], onDelete: Cascade)
 
   @@unique([cartId, foodId])
   @@index([cartId])
@@ -461,6 +466,13 @@ enum EscrowStatus {
   HELD
   RELEASED
   REFUNDED
+}
+
+enum DepositStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  CANCELLED
 }
 
 enum VendorLevel {
