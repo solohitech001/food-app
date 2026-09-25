@@ -97,6 +97,8 @@ export class AuthService {
       role: user.role,
     });
 
+
+
     return {
       token,
       user: {
@@ -118,4 +120,54 @@ export class AuthService {
       },
     });
   }
+
+
+    /* =========================
+     BACKFILL WALLETS FOR EXISTING USERS
+     ========================= */
+  async createMissingWallets() {
+    // Find all users that do NOT have a wallet
+    const usersWithoutWallet = await this.prisma.user.findMany({
+      where: {
+        wallet: null, // assumes relation is called "wallet"
+      },
+      select: {
+        id: true,
+        phoneNumber: true,
+      },
+    });
+
+    if (usersWithoutWallet.length === 0) {
+      return {
+        message: 'All users already have wallets',
+        created: 0,
+      };
+    }
+
+    let createdCount = 0;
+
+    for (const user of usersWithoutWallet) {
+      try {
+        await this.prisma.wallet.create({
+          data: {
+            userId: user.id,
+            balance: 0,
+            currency: 'NGN',
+          },
+        });
+        createdCount++;
+        console.log(`✅ Wallet created for user ${user.id} (${user.phoneNumber})`);
+      } catch (error) {
+        // In case of race condition / unique constraint
+        console.log(`⚠️ Skipped user ${user.id}:`, error.message);
+      }
+    }
+
+    return {
+      message: `Created wallets for ${createdCount} users`,
+      created: createdCount,
+      totalChecked: usersWithoutWallet.length,
+    };
+  }
+  
 }

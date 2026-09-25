@@ -29,17 +29,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify user OTP' })
   @ApiResponse({ status: 200, description: 'OTP verified successfully' })
   verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
-    return this.authService.verifyOtp(verifyOtpDto.phoneNumber, verifyOtpDto.otp);
+    return this.authService.verifyOtp(
+      verifyOtpDto.phoneNumber,
+      verifyOtpDto.otp,
+    );
   }
 
   /* =========================
      UPDATE USER LOCATION
   ========================= */
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth() // 🔑 Swagger knows this route requires a JWT Bearer token
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update user location (requires Bearer token)' })
   @ApiResponse({ status: 200, description: 'Location updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid token' })
+  @Post('update-location')
   updateLocation(@Req() req, @Body() updateLocationDto: UpdateLocationDto) {
     const { latitude, longitude, city, state } = updateLocationDto;
 
@@ -50,5 +54,21 @@ export class AuthController {
       city,
       state,
     );
+  }
+
+  /* =========================
+     BACKFILL MISSING WALLETS
+     (one-time use)
+  ========================= */
+  @Post('backfill-wallets')
+  @ApiOperation({
+    summary: 'Create wallets for existing users that do not have one',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Wallets created for users that were missing one',
+  })
+  backfillWallets() {
+    return this.authService.createMissingWallets();
   }
 }

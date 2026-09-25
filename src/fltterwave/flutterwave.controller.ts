@@ -137,17 +137,20 @@ export class FlutterwaveController {
     console.log('📌 Normalized →', { event, status, txRef, flwRef, amount });
 
     // Only process successful payments
+       // Only process successful payments
     const isSuccessful =
       status === 'successful' || status === 'SUCCESSFUL';
 
-    // Accept charge.completed OR successful USSD / card payments that carry a txRef
+    // Accept all successful payment types that carry a txRef
     const shouldProcess =
       isSuccessful &&
-      txRef &&
+      !!txRef &&
       (event === 'charge.completed' ||
         event === 'USSD_TRANSACTION' ||
         event === 'CARD_TRANSACTION' ||
-        !event); // some payloads have no event field
+        event === 'BANK_TRANSFER_TRANSACTION' ||
+        event === 'ACCOUNT_TRANSACTION' ||
+        !event);
 
     if (!shouldProcess) {
       console.log('⚠️ Ignoring Flutterwave event:', event, status);
