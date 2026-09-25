@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 import {
   EmptyOrderActionDto,
-} from './dto/create-order-with-items.dto';
+} from './dto/create-order-with-items.dto'
 
 import {
   ApiTags,
@@ -29,7 +29,7 @@ export class OrdersController {
   ) {}
 
   /* ==========================================================================
-     CREATE ORDER FROM CART (USER)
+     CREATE ORDER FROM  CART (USER)
      ========================================================================== */
 
   @UseGuards(JwtAuthGuard)
@@ -67,7 +67,9 @@ export class OrdersController {
   @ApiOperation({
     summary: 'Get order details with items',
   })
-  getOrder(@Param('id') id: string) {
+  getOrder(
+    @Param('id') id: string,
+  ) {
     return this.ordersService.getOrderById(id);
   }
 
@@ -144,8 +146,7 @@ export class OrdersController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/complete')
   @ApiOperation({
-    summary:
-      'User marks order as complete (Releases escrow)',
+    summary: 'User marks order as complete (Releases escrow)',
   })
   @ApiBody({
     type: EmptyOrderActionDto,
@@ -178,8 +179,7 @@ export class OrdersController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/reject')
   @ApiOperation({
-    summary:
-      'Vendor rejects an order (Triggers wallet refund)',
+    summary: 'Vendor rejects an order (Triggers wallet refund)',
   })
   @ApiBody({
     type: EmptyOrderActionDto,

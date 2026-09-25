@@ -8,32 +8,32 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String?         @unique
-  password       String?
-  role           Role            @default(CUSTOMER)
-  createdAt      DateTime        @default(now())
-  isVerified     Boolean         @default(false)
-  otpCode        String?
-  otpExpiresAt   DateTime?
-  phoneNumber    String?         @unique
-  city           String?
-  latitude       Float?
-  longitude      Float?
-  state          String?
-  lastOtpSentAt  DateTime?
-  updatedAt      DateTime?       @updatedAt
-  firstName      String?
-  lastName       String?
-  cart           Cart?
+  id            String      @id @default(uuid())
+  email         String?     @unique
+  password      String?
+  role          Role        @default(CUSTOMER)
+  createdAt     DateTime    @default(now())
+  isVerified    Boolean     @default(false)
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  phoneNumber   String?     @unique
+  city          String?
+  latitude      Float?
+  longitude     Float?
+  state         String?
+  lastOtpSentAt DateTime?
+  updatedAt     DateTime?   @updatedAt
+  firstName     String?
+  lastName      String?
+  cart          Cart?
   walletDeposits WalletDeposit[]
-  foodLikes      FoodLike[]
-  foodSaves      FoodSave[]
-  foodShares     FoodShare[]
-  orders         Order[]
-  reviews        Review[]
-  vendor         Vendor?
-  wallet         Wallet?
+  foodLikes     FoodLike[]
+  foodSaves     FoodSave[]
+  foodShares    FoodShare[]
+  orders        Order[]
+  reviews       Review[]
+  vendor        Vendor?
+  wallet        Wallet?
 }
 
 model Vendor {
@@ -208,33 +208,41 @@ model Wallet {
   id                   String        @id @default(uuid())
   userId               String?       @unique
   vendorId             String?       @unique
-  balance              Float         @default(0)
-  flutterwaveRef       String
-  withdrawalsThisMonth Int           @default(0)
-  createdAt            DateTime      @default(now())
+
+  balance              Decimal       @default(0) @db.Decimal(15, 2)
   currency             String        @default("NGN")
   version              Int           @default(0)
-  updatedAt            DateTime      @updatedAt
-  virtualAccountNumber String        @unique
-  virtualBankName      String
-  escrowsToVendor      Escrow[]      @relation("VendorEscrow")
-  escrowsHeld          Escrow[]      @relation("UserEscrow")
-  transactions         Transaction[]
-  user                 User?         @relation(fields: [userId], references: [id])
-  vendor               Vendor?       @relation(fields: [vendorId], references: [id])
-  withdrawals          Withdrawal[]
+  withdrawalsThisMonth Int           @default(0)
+
+  // Legacy Flutterwave virtual-account fields
+  virtualAccountNumber String?       @unique
+  virtualBankName      String?
+  flutterwaveRef       String?       @unique
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  escrowsToVendor Escrow[] @relation("VendorEscrow")
+  escrowsHeld    Escrow[]  @relation("UserEscrow")
+  transactions   Transaction[]
+  user           User?     @relation(fields: [userId], references: [id])
+  vendor         Vendor?   @relation(fields: [vendorId], references: [id])
+  withdrawals    Withdrawal[]
+
+  @@index([userId])
+  @@index([vendorId])
 }
 
 model WalletDeposit {
-  id            String        @id @default(uuid())
-  userId        String
-  amount        Decimal       @db.Decimal(15, 2)
-  currency      String        @default("NGN")
-  reference     String        @unique
-  flutterwaveId String?       @unique
-  status        DepositStatus @default(PENDING)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  userId         String
+  amount         Decimal       @db.Decimal(15, 2)
+  currency       String        @default("NGN")
+  reference      String        @unique
+  flutterwaveId  String?       @unique
+  status         DepositStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 
@@ -244,19 +252,22 @@ model WalletDeposit {
 model Transaction {
   id           String            @id @default(uuid())
   walletId     String
-  amount       Float
+  amount       Decimal           @db.Decimal(15, 2)
   type         TransactionType
   source       TransactionSource
   reference    String            @unique
   narration    String
   createdAt    DateTime          @default(now())
-  balanceAfter Float?
+  balanceAfter Decimal           @db.Decimal(15, 2)
   status       String            @default("SUCCESS")
   userId       String?
   updatedAt    DateTime          @updatedAt
-  wallet       Wallet            @relation(fields: [walletId], references: [id])
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
 
   @@index([walletId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Withdrawal {
@@ -427,6 +438,7 @@ enum LocationLockType {
   POLYGON
 }
 
+
 enum OrderStatus {
   PENDING
   PREPARING
@@ -460,6 +472,7 @@ enum TransactionSource {
   TRANSFER
   WITHDRAWAL
   ESCROW
+  REFUND
 }
 
 enum EscrowStatus {

@@ -7,7 +7,7 @@ import {
   Headers,
   Body,
 } from '@nestjs/common';
-
+import { WalletDepositService } from 'src/wallet-deposit/wallet-deposit.service';
 import { FlutterwaveService } from './flutterwave.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +18,7 @@ export class FlutterwaveController {
   constructor(
     private readonly flutterwaveService: FlutterwaveService,
     private readonly walletService: WalletService,
+    private readonly walletDepositService: WalletDepositService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -53,9 +54,7 @@ export class FlutterwaveController {
     }
 
     if (!user.firstName || !user.lastName) {
-      throw new BadRequestException(
-        'First name and last name are required',
-      );
+      throw new BadRequestException('First name and last name are required');
     }
 
     if (!body.bvn && !body.nin) {
@@ -64,8 +63,7 @@ export class FlutterwaveController {
       );
     }
 
-    const existingWallet =
-      await this.walletService.findByUserId(userId);
+    const existingWallet = await this.walletService.findByUserId(userId);
 
     if (existingWallet) {
       return existingWallet;
@@ -74,16 +72,15 @@ export class FlutterwaveController {
     // This becomes Flutterwave's tx_ref
     const reference = `PLATTER-${userId}-${Date.now()}`;
 
-    const account =
-      await this.flutterwaveService.createVirtualAccount({
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phoneNumber: user.phoneNumber ?? undefined,
-        bvn: body.bvn,
-        nin: body.nin,
-        reference,
-      });
+    const account = await this.flutterwaveService.createVirtualAccount({
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phoneNumber: user.phoneNumber ?? undefined,
+      bvn: body.bvn,
+      nin: body.nin,
+      reference,
+    });
 
     return this.walletService.create({
       userId,
@@ -104,19 +101,12 @@ export class FlutterwaveController {
     @Headers('verif-hash') signature: string,
     @Body() payload: any,
   ) {
-    // Verify Flutterwave webhook signature
     if (!this.flutterwaveService.verifySignature(signature)) {
-      throw new BadRequestException(
-        'Invalid webhook signature',
-      );
+      throw new BadRequestException('Invalid webhook signature');
     }
 
-    console.log(
-      '🔥 FLUTTERWAVE PAYLOAD:',
-      JSON.stringify(payload, null, 2),
-    );
+    console.log('🔥  FLUTTERWAVE PAYLOAD:', JSON.stringify(payload, null, 2));
 
-    // Only process successful completed payments
     if (
       payload?.event !== 'charge.completed' ||
       payload?.data?.status !== 'successful'
@@ -132,9 +122,7 @@ export class FlutterwaveController {
       };
     }
 
-    // Extract tx_ref, flw_ref and amount
-    const data =
-      this.flutterwaveService.extractFundingData(payload);
+    const data = this.flutterwaveService.extractFundingData(payload);
 
     if (!data) {
       return {
@@ -142,39 +130,19 @@ export class FlutterwaveController {
       };
     }
 
-    console.log(
-      '💰 Wallet Reference (tx_ref):',
-      data.walletReference,
-    );
+    console.log('💰 Wallet Deposit Reference:', data.walletReference);
 
-    console.log(
-      '💰 Transaction Reference (flw_ref):',
+    console.log('💰 Flutterwave Transaction:', data.transactionReference);
+
+    console.log('💰 Payment Amount:', data.amount);
+
+    const result = await this.walletDepositService.completeDeposit(
+      data.walletReference,
       data.transactionReference,
     );
 
-    console.log(
-      '💰 Funding Amount:',
-      data.amount,
-    );
+    console.log('✅ Wallet deposit result:', result);
 
-    // tx_ref     -> finds the wallet
-    // flw_ref    -> identifies this specific payment
-    const result =
-      await this.walletService.handleFlutterwaveWebhook({
-        walletReference: data.walletReference,
-        transactionReference: data.transactionReference,
-        amount: data.amount,
-        currency: 'NGN',
-      });
-
-    console.log(
-      '✅ Wallet funding result:',
-      result,
-    );
-
-    return {
-      status: 'success',
-      ...result,
-    };
+    return result;
   }
 }

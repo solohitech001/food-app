@@ -40,27 +40,17 @@ export class WalletDepositService {
    * The wallet is only credited after payment
    * has been successfully verified.
    */
-  async createDeposit(
-    userId: string,
-    amount: number,
-    currency = 'NGN',
-  ) {
+  async createDeposit(userId: string, amount: number, currency = 'NGN') {
     if (!userId) {
-      throw new BadRequestException(
-        'User ID is required',
-      );
+      throw new BadRequestException('User ID is required');
     }
 
     if (!amount || amount <= 0) {
-      throw new BadRequestException(
-        'Amount must be greater than zero',
-      );
+      throw new BadRequestException('Amount must be greater than zero');
     }
 
     if (!Number.isFinite(amount)) {
-      throw new BadRequestException(
-        'Invalid deposit amount',
-      );
+      throw new BadRequestException('Invalid deposit amount');
     }
 
     if (!currency) {
@@ -77,9 +67,7 @@ export class WalletDepositService {
     });
 
     if (!user) {
-      throw new NotFoundException(
-        'User not found',
-      );
+      throw new NotFoundException('User not found');
     }
 
     if (!user.email) {
@@ -96,47 +84,40 @@ export class WalletDepositService {
     /**
      * Create the pending deposit first.
      */
-    const deposit =
-      await this.prisma.walletDeposit.create({
-        data: {
-          userId,
-          amount,
-          currency,
-          reference,
-          status: DepositStatus.PENDING,
-        },
-      });
+    const deposit = await this.prisma.walletDeposit.create({
+      data: {
+        userId,
+        amount,
+        currency,
+        reference,
+        status: DepositStatus.PENDING,
+      },
+    });
 
     try {
       /**
        * Initialize Flutterwave Standard Checkout.
        */
-      const payment =
-        await this.flutterwaveService.initializePayment({
-          amount,
-          currency,
-          txRef: reference,
+      const payment = await this.flutterwaveService.initializePayment({
+        amount,
+        currency,
+        txRef: reference,
 
-          customer: {
-            email: user.email,
-            name: `${user.firstName ?? ''} ${
-              user.lastName ?? ''
-            }`.trim(),
-            phoneNumber: user.phoneNumber ?? undefined,
-          },
+        customer: {
+          email: user.email,
+          name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim(),
+          phoneNumber: user.phoneNumber ?? undefined,
+        },
 
-          /**
-           * Change this URL to your actual frontend
-           * payment callback page.
-           */
-          redirectUrl:
-            'http://localhost:3000/payment/callback',
-        });
+        /**
+         * Change this URL to your actual frontend
+         * payment callback page.
+         */
+        redirectUrl: 'http://localhost:3000/payment/callback',
+      });
 
       if (!payment.link) {
-        throw new Error(
-          'Flutterwave did not return a checkout link',
-        );
+        throw new Error('Flutterwave did not return a checkout link');
       }
 
       /**
@@ -147,10 +128,7 @@ export class WalletDepositService {
         paymentLink: payment.link,
       };
     } catch (error) {
-      console.error(
-        'Wallet deposit payment initialization failed:',
-        error,
-      );
+      console.error('Wallet deposit payment initialization failed:', error);
 
       /**
        * Mark the deposit as failed if Flutterwave
@@ -165,9 +143,7 @@ export class WalletDepositService {
         },
       });
 
-      throw new BadRequestException(
-        'Unable to initialize Flutterwave payment',
-      );
+      throw new BadRequestException('Unable to initialize Flutterwave payment');
     }
   }
 
@@ -188,22 +164,16 @@ export class WalletDepositService {
   /**
    * Get a single deposit belonging to a user.
    */
-  async getDeposit(
-    userId: string,
-    depositId: string,
-  ) {
-    const deposit =
-      await this.prisma.walletDeposit.findFirst({
-        where: {
-          id: depositId,
-          userId,
-        },
-      });
+  async getDeposit(userId: string, depositId: string) {
+    const deposit = await this.prisma.walletDeposit.findFirst({
+      where: {
+        id: depositId,
+        userId,
+      },
+    });
 
     if (!deposit) {
-      throw new NotFoundException(
-        'Wallet deposit not found',
-      );
+      throw new NotFoundException('Wallet  deposit not found');
     }
 
     return deposit;
@@ -215,17 +185,22 @@ export class WalletDepositService {
    * This should ONLY happen after the Flutterwave
    * payment has been successfully verified.
    */
-  async completeDeposit(
-    reference: string,
-    flutterwaveId?: string,
-  ) {
+  async completeDeposit(reference: string, flutterwaveId?: string) {
+    console.log('====================================');
+    console.log('💰 COMPLETE DEPOSIT CALLED');
+    console.log('📌 Deposit reference:', reference);
+    console.log('📌 Flutterwave ID:', flutterwaveId);
+
     return this.prisma.$transaction(async (tx) => {
-      const deposit =
-        await tx.walletDeposit.findUnique({
-          where: {
-            reference,
-          },
-        });
+      console.log('🔎 Looking for deposit...');
+
+      const deposit = await tx.walletDeposit.findUnique({
+        where: {
+          reference,
+        },
+      });
+
+      console.log('📦 Deposit found:', deposit);
 
       if (!deposit) {
         throw new NotFoundException(
@@ -233,43 +208,40 @@ export class WalletDepositService {
         );
       }
 
-      /**
-       * Idempotency protection.
-       *
-       * Prevents duplicate wallet credits when
-       * Flutterwave sends the same webhook more than once.
-       */
-      if (
-        deposit.status ===
-        DepositStatus.SUCCESSFUL
-      ) {
+      console.log('📊 Deposit status:', deposit.status);
+      console.log('💵 Deposit amount:', deposit.amount);
+      console.log('👤 Deposit user:', deposit.userId);
+
+      if (deposit.status === DepositStatus.SUCCESSFUL) {
+        console.log('⚠️ Deposit already successful');
         return deposit;
       }
 
-      /**
-       * Find user's wallet.
-       */
+      console.log('🔎 Looking for user wallet...');
+
       const wallet = await tx.wallet.findFirst({
         where: {
           userId: deposit.userId,
         },
       });
 
+      console.log('👛 Wallet found:', wallet);
+
       if (!wallet) {
-        throw new NotFoundException(
-          'Wallet not found for this user',
-        );
+        throw new NotFoundException('Wallet not found for this user');
       }
 
       const amount = Number(deposit.amount);
+      const currentBalance = Number(wallet.balance);
+      const newBalance = currentBalance + amount;
 
-      const newBalance =
-        wallet.balance + amount;
+      console.log('💰 Current balance:', currentBalance);
+      console.log('💵 Deposit amount:', amount);
+      console.log('💰 New balance:', newBalance);
 
-      /**
-       * Credit wallet.
-       */
-      await tx.wallet.update({
+      console.log('💳 Updating wallet balance...');
+
+      const updatedWallet = await tx.wallet.update({
         where: {
           id: wallet.id,
         },
@@ -281,28 +253,29 @@ export class WalletDepositService {
         },
       });
 
-      /**
-       * Record wallet transaction.
-       */
-      await tx.transaction.create({
+      console.log('✅ Wallet updated:', updatedWallet.balance);
+
+      console.log('🧾 Creating transaction...');
+
+      const transaction = await tx.transaction.create({
         data: {
           walletId: wallet.id,
           amount,
           type: TransactionType.CREDIT,
           source: TransactionSource.FLUTTERWAVE,
           reference: deposit.reference,
-          narration:
-            'Wallet deposit via Flutterwave',
+          narration: 'Wallet deposit via Flutterwave',
           balanceAfter: newBalance,
           status: 'SUCCESS',
           userId: deposit.userId,
         },
       });
 
-      /**
-       * Mark deposit as successful.
-       */
-      return tx.walletDeposit.update({
+      console.log('✅ Transaction created:', transaction.id);
+
+      console.log('📝 Marking deposit successful...');
+
+      const completedDeposit = await tx.walletDeposit.update({
         where: {
           id: deposit.id,
         },
@@ -311,6 +284,11 @@ export class WalletDepositService {
           flutterwaveId,
         },
       });
+
+      console.log('✅ DEPOSIT COMPLETED');
+      console.log('====================================');
+
+      return completedDeposit;
     });
   }
 
@@ -318,23 +296,17 @@ export class WalletDepositService {
    * Mark a deposit as failed.
    */
   async failDeposit(reference: string) {
-    const deposit =
-      await this.prisma.walletDeposit.findUnique({
-        where: {
-          reference,
-        },
-      });
+    const deposit = await this.prisma.walletDeposit.findUnique({
+      where: {
+        reference,
+      },
+    });
 
     if (!deposit) {
-      throw new NotFoundException(
-        'Wallet deposit not found',
-      );
+      throw new NotFoundException('Wallet deposit not found');
     }
 
-    if (
-      deposit.status ===
-      DepositStatus.SUCCESSFUL
-    ) {
+    if (deposit.status === DepositStatus.SUCCESSFUL) {
       throw new BadRequestException(
         'A successful deposit cannot be marked as failed',
       );

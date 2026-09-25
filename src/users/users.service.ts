@@ -49,12 +49,12 @@ export class UsersService {
 
       // ✅ WALLET (ACCOUNT NUMBER)
       wallet: user.wallet
-        ? {
-            accountNumber: user.wallet.virtualAccountNumber,
-            bankName: user.wallet.virtualBankName,
-            balance: user.wallet.balance,
-          }
-        : null,
+  ? {
+      accountNumber: user.wallet.virtualAccountNumber ?? '',
+      bankName: user.wallet.virtualBankName ?? '',
+      balance: Number(user.wallet.balance),
+    }
+  : null,
 
       // ✅ VENDOR
       vendor: user.vendor

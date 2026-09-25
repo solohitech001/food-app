@@ -18,18 +18,20 @@ export class AuthService {
     const exists = await this.prisma.user.findUnique({
       where: { phoneNumber },
     });
-
     if (exists) {
-      throw new BadRequestException('Phone number already registered');
+      throw new BadRequestException('Phone  number already registered');
     }
-
-    const user = await this.prisma.user.create({
-      data: { phoneNumber },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({ data: { phoneNumber } });
+      const wallet = await tx.wallet.create({
+        data: { userId: user.id, balance: 0, currency: 'NGN' },
+      });
+      return { user, wallet };
     });
-
     return {
       message: 'Registration successful',
-      userId: user.id,
+      userId: result.user.id,
+      walletId: result.wallet.id,
     };
   }
 

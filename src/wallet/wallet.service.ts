@@ -2,6 +2,7 @@ import {
   Injectable,
   ForbiddenException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from '../fltterwave/flutterwave.service';
@@ -169,8 +170,8 @@ export class WalletService {
   }
 
   /* ============================
-     CREDIT (INTERNAL USE)
-  ============================ */
+   CREDIT (INTERNAL USE)
+============================ */
   async credit(walletId: string, amount: number, reference: string) {
     return this.prisma.$transaction(async (tx) => {
       const exists = await tx.transaction.findUnique({
@@ -179,9 +180,21 @@ export class WalletService {
 
       if (exists) return;
 
+      const wallet = await tx.wallet.findUnique({
+        where: { id: walletId },
+      });
+
+      if (!wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
+
+      const newBalance = Number(wallet.balance) + amount;
+
       const updated = await tx.wallet.update({
         where: { id: walletId },
-        data: { balance: { increment: amount } },
+        data: {
+          balance: { increment: amount },
+        },
       });
 
       await tx.transaction.create({
@@ -192,6 +205,7 @@ export class WalletService {
           source: 'FLUTTERWAVE',
           reference,
           narration: 'Wallet funding',
+          balanceAfter: newBalance,
         },
       });
 
@@ -207,7 +221,7 @@ export class WalletService {
       where: { id: walletId },
     });
 
-    if (!wallet || wallet.balance < amount) {
+    if (!wallet || Number(wallet.balance) < amount) {
       throw new ForbiddenException('Insufficient balance');
     }
 
@@ -233,21 +247,28 @@ export class WalletService {
       throw new BadRequestException('Wallet not found');
     }
 
-    if (userWallet.balance < amount) {
+    if (Number(userWallet.balance) < amount) {
       throw new ForbiddenException('Insufficient balance');
     }
 
     const reference = `TX-${Date.now()}`;
 
     return this.prisma.$transaction(async (tx) => {
+      const userNewBalance = Number(userWallet.balance) - amount;
+      const vendorNewBalance = Number(vendorWallet.balance) + amount;
+
       await tx.wallet.update({
         where: { id: userWallet.id },
-        data: { balance: { decrement: amount } },
+        data: {
+          balance: { decrement: amount },
+        },
       });
 
       await tx.wallet.update({
         where: { id: vendorWallet.id },
-        data: { balance: { increment: amount } },
+        data: {
+          balance: { increment: amount },
+        },
       });
 
       await tx.transaction.createMany({
@@ -259,6 +280,7 @@ export class WalletService {
             source: 'TRANSFER',
             reference,
             narration: 'Payment to vendor',
+            balanceAfter: userNewBalance,
           },
           {
             walletId: vendorWallet.id,
@@ -267,11 +289,14 @@ export class WalletService {
             source: 'TRANSFER',
             reference,
             narration: 'Payment from customer',
+            balanceAfter: vendorNewBalance,
           },
         ],
       });
 
-      return { message: 'Transfer successful' };
+      return {
+        message: 'Transfer successful',
+      };
     });
   }
 
@@ -285,7 +310,7 @@ export class WalletService {
 
     if (!wallet) throw new BadRequestException('Wallet not found');
 
-    if (wallet.balance < amount) {
+    if (Number(wallet.balance) < amount) {
       throw new ForbiddenException('Insufficient balance');
     }
 
@@ -321,6 +346,7 @@ export class WalletService {
           source: 'WITHDRAWAL',
           reference,
           narration: 'Withdrawal to bank',
+          balanceAfter: Number(wallet.balance) - amount,
         },
       });
 
@@ -502,6 +528,7 @@ export class WalletService {
           source: 'FLUTTERWAVE',
           reference,
           narration: 'Wallet funded via Flutterwave',
+          balanceAfter: Number(wallet.balance) + amount,
         },
       });
 

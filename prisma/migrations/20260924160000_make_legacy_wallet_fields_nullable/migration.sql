@@ -1,0 +1,8 @@
+ALTER TABLE "Wallet"
+ALTER COLUMN "virtualAccountNumber" DROP NOT NULL;
+
+ALTER TABLE "Wallet"
+ALTER COLUMN "virtualBankName" DROP NOT NULL;
+
+ALTER TABLE "Wallet"
+ALTER COLUMN "flutterwaveRef" DROP NOT NULL;

@@ -10,8 +10,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class FlutterwaveService {
   constructor(private prisma: PrismaService) {}
   private readonly baseUrl = 'https://api.flutterwave.com/v3';
-  private readonly secretKey =
-    'FLWSECK-b09e764b7e44a276b65c07440f0a3b94-19d8e5acc14vt-X';
+  private readonly secretKey = "FLWSECK_TEST-91a06e8e67e8b17686b692abb9521891-X"
+    // 'FLWSECK-b09e764b7e44a276b65c07440f0a3b94-19d8e5acc14vt-X';
   private readonly secretHash = process.env.FLW_SECRET_HASH;
 
   /* ============================

@@ -28,7 +28,7 @@ export class EscrowService {
           where: { id: userWalletId },
         });
 
-        if (!wallet || wallet.balance < amount) {
+        if (!wallet || Number(wallet.balance) < amount) {
           throw new BadRequestException('Insufficient balance');
         }
 
@@ -47,6 +47,7 @@ export class EscrowService {
             source: 'ESCROW',
             reference: `ESCROW-${orderId}`,
             narration: 'Escrow hold',
+            balanceAfter: Number(wallet.balance) - amount,
           },
         });
 
@@ -95,6 +96,7 @@ export class EscrowService {
             source: 'ESCROW',
             reference: `RELEASE-${orderId}`,
             narration: 'Escrow release',
+            balanceAfter: Number(escrow.amount) + escrow.amount, // ✅ FIXED HERE
           },
         });
 
@@ -142,6 +144,7 @@ export class EscrowService {
             source: 'ESCROW',
             reference: `REFUND-${orderId}`,
             narration: 'Escrow refund',
+            balanceAfter: Number(escrow.amount) + escrow.amount, // ✅ FIXED HERE
           },
         });
 
