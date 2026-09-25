@@ -93,8 +93,9 @@ export class FlutterwaveController {
   /**
    * Flutterwave webhook
    *
-   * tx_ref  -> identifies the user's wallet
-   * flw_ref -> identifies the individual payment
+   * Supports both:
+   * - New format: { event: 'charge.completed', data: { status, tx_ref, ... } }
+   * - Legacy/USSD format: { status, txRef, amount, ... }
    */
   @Post('webhook')
   async handleWebhook(
@@ -107,33 +108,71 @@ export class FlutterwaveController {
 
     console.log('🔥  FLUTTERWAVE PAYLOAD:', JSON.stringify(payload, null, 2));
 
-    if (
-      payload?.event !== 'charge.completed' ||
-      payload?.data?.status !== 'successful'
-    ) {
-      console.log(
-        '⚠️ Ignoring Flutterwave event:',
-        payload?.event,
-        payload?.data?.status,
-      );
+    // ----- Normalize different Flutterwave payload shapes -----
+    const event = payload?.event ?? payload?.['event.type'] ?? null;
+    const status =
+      payload?.data?.status ??
+      payload?.status ??
+      null;
 
-      return {
-        status: 'ignored',
+    const txRef =
+      payload?.data?.tx_ref ??
+      payload?.data?.txRef ??
+      payload?.txRef ??
+      payload?.tx_ref ??
+      null;
+
+    const flwRef =
+      payload?.data?.flw_ref ??
+      payload?.data?.flwRef ??
+      payload?.flwRef ??
+      payload?.flw_ref ??
+      null;
+
+    const amount =
+      payload?.data?.amount ??
+      payload?.amount ??
+      null;
+
+    console.log('📌 Normalized →', { event, status, txRef, flwRef, amount });
+
+    // Only process successful payments
+    const isSuccessful =
+      status === 'successful' || status === 'SUCCESSFUL';
+
+    // Accept charge.completed OR successful USSD / card payments that carry a txRef
+    const shouldProcess =
+      isSuccessful &&
+      txRef &&
+      (event === 'charge.completed' ||
+        event === 'USSD_TRANSACTION' ||
+        event === 'CARD_TRANSACTION' ||
+        !event); // some payloads have no event field
+
+    if (!shouldProcess) {
+      console.log('⚠️ Ignoring Flutterwave event:', event, status);
+      return { status: 'ignored' };
+    }
+
+    // Prefer the service extractor if it works, otherwise fall back to normalized values
+    let data = this.flutterwaveService.extractFundingData(payload);
+
+    if (!data) {
+      // Fallback for the legacy shape you are currently receiving
+      data = {
+        walletReference: txRef,
+        transactionReference: flwRef ?? txRef,
+        amount: Number(amount),
       };
     }
 
-    const data = this.flutterwaveService.extractFundingData(payload);
-
-    if (!data) {
-      return {
-        status: 'ignored',
-      };
+    if (!data?.walletReference) {
+      console.log('⚠️ Could not extract wallet reference from payload');
+      return { status: 'ignored' };
     }
 
     console.log('💰 Wallet Deposit Reference:', data.walletReference);
-
     console.log('💰 Flutterwave Transaction:', data.transactionReference);
-
     console.log('💰 Payment Amount:', data.amount);
 
     const result = await this.walletDepositService.completeDeposit(
